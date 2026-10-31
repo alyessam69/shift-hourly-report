@@ -117,8 +117,9 @@ var SP2={cols:[118,88,74,80,118],tf:18,th:34,hf:19,hh:62,vf:19,vh:35,wrap:1};
 var SP3={cols:[80,80,100,88],tf:18,th:32,hf:20,hh:32,vf:17,vh:43};
 function t1(){return tbl('Reactor','#006400',SP1,['Mois%','FFA%','FA%'],['','N/A',''])}
 function t2(){return tbl('Plodder','#574967',SP2,['Moisture %','FFA%','FA%','Y+5R','Capacity'],['','N/A','','',''])}
-function shf(){var o=xs().sh||{};function i(f,l,ph){return '<label>'+l+'<br><input data-f="'+f+'" inputmode="decimal" placeholder="'+ph+'" value="'+esc(o[f]||'')+'"></label>'}
- return '<div class="shf nocopy">Shift analyses \u2013 type once, used for both samples (not copied)<div class="row">'+i('iv','IV','42.2')+i('ti','Titre','45.5')+i('col','Color','0.2 R / 1.1Y')+'</div></div>'}
+var COLDEF='0.2 R / 1.1Y';
+function shf(){var o=xs().sh||{};function i(f,l,ph,dv){var v=(o[f]!==undefined&&o[f]!==null&&o[f]!=='')?o[f]:(dv||'');return '<label>'+l+'<br><input data-f="'+f+'" inputmode="decimal" placeholder="'+ph+'" value="'+esc(v)+'"></label>'}
+ return '<div class="shf nocopy">Shift analyses \u2013 type once, used for both samples (not copied)<div class="row">'+i('iv','IV','42.2')+i('ti','Titre','45.5')+i('col','Color',COLDEF,COLDEF)+'</div></div>'}
 function t3c(card,time){return (card._samp&&time===card._time?shf():'')+t3(time)}
 function t3(time){return tbl('Plodder ('+time+')','#2d4f70',SP3,['CL %','Gly%','EDTA%','TFM'],['','','',''])}
 function cellTxt(x){return x.textContent.replace(/\u00a0/g,'').trim()}
@@ -225,7 +226,7 @@ function prng(str){var h=1779033703^str.length;for(var i=0;i<str.length;i++){h=M
 function rnd(X,h){var sh=X.sh||{},tol=parseFloat((X.rb||{}).tol);if(isNaN(tol))tol=0.1;
  var R=prng(CUR+'|'+(X.date||todayISO())+'|'+h+'|'+(X.seed||0));
  function j(v,dec){var b=parseFloat(v);if(isNaN(b))return '';return (b+(R()*2-1)*tol).toFixed(dec)}
- return{iv:j(sh.iv,2),ti:j(sh.ti,1),col:String(sh.col||'').trim()}}
+ return{iv:j(sh.iv,2),ti:j(sh.ti,1),col:String(sh.col||COLDEF).trim()}}
 function sumW(a){var t=0;a.forEach(function(c){t+=c.w});return t}
 var SHC={A:'#92CDDC',B:'#FAC090',C:'#E6B9B8'};
 var RED_EX=['E','F','J','K','L','M','N','O','P','Q','R','S'],PL_EX=['E','L','N','O','P','Q','R'];
@@ -250,7 +251,7 @@ function vals(kind,d,X){
   v.I=d.own?d.a[8]:'';v.J=d.own?d.a[9]:'';v.K=d.own?d.a[10]:'';v.M=d.own?d.a[11]:'';
   v.E=g('E','No rancid odor');v.L=g('L','');v.Q=g('Q','Present');v.R=g('R','');
   var rv=d.own?rnd(X,d.h):null;
-  function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||(k==='P'&&e==='0.2 R / 1.1Y'))){auto[k]=1;return val}return e!==undefined?e:''}
+  function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||(k==='P'&&e===COLDEF))){auto[k]=1;return val}return e!==undefined?e:''}
   v.N=ga('N',rv&&rv.iv);v.O=ga('O',rv&&rv.ti);v.P=ga('P',rv&&rv.col);
   PL_EX.forEach(function(k){ed[k]=1});
   var m=num(v.F),f=num(v.H);if(m!==null&&m>14.85)red.F=1;if(f!==null&&f>0.05)red.H=1;
