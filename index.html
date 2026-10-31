@@ -21,6 +21,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--card);z-index:10}
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--card);border-bottom:1px solid var(--line);padding:10px 12px}
 h1{font-size:17px;margin:0 0 8px}
+.hrow{display:flex;align-items:center;gap:8px}
+.hrow h1{flex:1;min-width:0}
+.ib{background:var(--acc);color:#fff;border:0;border-radius:9px;padding:8px 13px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.ib[hidden]{display:none}
 .tabs{display:flex;gap:8px}
 .tabs button{flex:1;padding:10px 4px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;font-size:14px;font-weight:600}
 .tabs button small{display:block;font-weight:400;color:var(--mut);font-size:11px}
@@ -66,7 +70,7 @@ td.ex:focus{outline:3px solid #3b82f6;outline-offset:-3px}
 </head>
 <body>
 <header>
-<h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -439,7 +443,26 @@ Object.keys(SH).forEach(function(k){
 var sj=document.createElement('button');sj.className='sj';sj.innerHTML='Summary<small>↓ tables</small>';sj.onclick=function(){var e=document.getElementById('sum');if(e)e.scrollIntoView({behavior:'smooth'})};tabs.appendChild(sj);
 tabs.children[0].click();
 
-if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(reg){reg.addEventListener('updatefound',function(){var sw=reg.installing;if(!sw)return;sw.addEventListener('statechange',function(){if(sw.state==='installed'&&navigator.serviceWorker.controller){sw.postMessage('skip-waiting');navigator.serviceWorker.addEventListener('controllerchange',function(){location.reload()})}})})}).catch(function(){})})}
+</script>
+<script>
+/* Add-to-home-screen install button */
+(function(){
+ var btn=document.getElementById('install'),deferred=null;
+ var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();deferred=e;if(btn)btn.hidden=false;
+ });
+ if(isIOS&&btn)btn.hidden=false;
+ if(btn)btn.addEventListener('click',function(){
+  if(deferred){
+   deferred.prompt();
+   deferred.userChoice.then(function(){deferred=null;if(btn)btn.hidden=true;},function(){deferred=null;});
+   return;
+  }
+  toast('Browser menu > Add to Home screen');
+ });
+})();
 </script>
 </body>
 </html>
