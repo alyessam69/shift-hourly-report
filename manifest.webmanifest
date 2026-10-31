@@ -1,0 +1,17 @@
+{
+  "name": "Shift Hourly Report",
+  "short_name": "Shift Report",
+  "description": "Hourly Reactor and Plodder tables, TFM calculation and summary tables for the In Process and Daily Noodles sheets.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1218",
+  "theme_color": "#2d4f70",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
