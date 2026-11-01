@@ -25,6 +25,16 @@ h1{font-size:17px;margin:0 0 8px}
 .hrow h1{flex:1;min-width:0}
 .ib{background:var(--acc);color:#fff;border:0;border-radius:9px;padding:8px 13px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
 .ib[hidden]{display:none}
+.syncst{font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line);border-radius:6px;padding:3px 7px;white-space:nowrap}
+.syncst[hidden]{display:none}
+.syncwrap{position:fixed;inset:0;background:rgba(8,12,20,.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:56px 12px 12px}
+.syncwrap[hidden]{display:none}
+.syncbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;width:100%;max-width:430px;box-shadow:0 14px 44px rgba(0,0,0,.3)}
+.sbh{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.sbh button{background:transparent;border:0;color:var(--mut);font-size:22px;line-height:1;cursor:pointer;padding:0 4px}
+.sl{display:block;font-size:12px;color:var(--mut);margin:9px 0}
+.sl textarea,.sl input{width:100%;margin-top:4px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.srow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px}
 .tabs{display:flex;gap:8px}
 .tabs button{flex:1;padding:10px 4px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;font-size:14px;font-weight:600}
 .tabs button small{display:block;font-weight:400;color:var(--mut);font-size:11px}
@@ -70,7 +80,7 @@ td.ex:focus{outline:3px solid #3b82f6;outline-offset:-3px}
 </head>
 <body>
 <header>
-<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button></div>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -463,6 +473,172 @@ if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.add
   }
   toast('Browser menu > Add to Home screen');
  });
+})();
+</script>
+<script>
+/* ---------------- optional cloud sync (phone <-> PC) ----------------
+   The app keeps working exactly as before if no sync code is set.
+   Data is stored in a tiny JSON document per shift and merged by timestamp,
+   so two devices can both work without overwriting each other.
+   Setting a PIN encrypts the cloud copy (AES-GCM + PBKDF2).               */
+var SYNC={code:'',pin:'',salt:'',ts:{},last:0,state:'off',applying:false};
+function sRead(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}}
+function sWrite(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function syncLoad(){
+ try{
+  SYNC.code=sRead('shiftrep_sync_code','');
+  SYNC.pin=sRead('shiftrep_sync_pin','');
+  SYNC.salt=sRead('shiftrep_sync_salt','');
+  SYNC.ts=JSON.parse(sRead('shiftrep_sync_ts','{}'))||{};
+ }catch(e){}
+}
+function syncPersist(){
+ sWrite('shiftrep_sync_code',SYNC.code);sWrite('shiftrep_sync_pin',SYNC.pin);
+ sWrite('shiftrep_sync_salt',SYNC.salt);sWrite('shiftrep_sync_ts',JSON.stringify(SYNC.ts));
+}
+function syncCfg(){
+ var c=(SYNC.code||'').trim();if(!c)return null;
+ var i=c.indexOf('|'),url=(i<0?c:c.slice(0,i)).trim(),key=(i<0?'':c.slice(i+1).trim());
+ var h={};if(key)h['X-Master-Key']=key;
+ return {url:url,headers:h};
+}
+function b64(b){var s='',i;for(i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s)}
+function unb64(s){var b=atob(s),a=new Uint8Array(b.length),i;for(i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
+function syncCryptoOk(){return !!(window.crypto&&window.crypto.subtle)}
+async function syncKey(saltB64){
+ if(!SYNC.pin)return null;
+ var km=await crypto.subtle.importKey('raw',new TextEncoder().encode(SYNC.pin),'PBKDF2',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(saltB64),iterations:120000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+function syncPayload(){
+ var v1=load(),x1=loadX(),shifts={};
+ ['A','B','C'].forEach(function(k){shifts[k]={d:v1[k]||{},x:x1[k]||{},ts:SYNC.ts[k]||0}});
+ return {v:1,ts:Date.now(),shifts:shifts};
+}
+function syncApply(k,rem){
+ var v1=load(),x1=loadX();
+ v1[k]=rem.d||{};x1[k]=rem.x||{};
+ SYNC.applying=true;
+ try{sset(KEY,JSON.stringify(v1));sset(XK,JSON.stringify(x1));}finally{SYNC.applying=false;}
+}
+function syncStatus(msg){
+ var el=document.getElementById('syncSt');if(!el)return;
+ el.hidden=!SYNC.code;
+ if(msg)el.textContent=msg;
+ var t=new Date(SYNC.last);
+ el.textContent=SYNC.state==='ok'?('Synced '+(t.getHours()<10?'0':'')+t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes())
+  :(SYNC.state==='err'?'Sync error':(SYNC.state==='busy'?'Syncing...':'Sync off'));
+ el.title=msg||'';
+}
+async function syncPush(){
+ var cfg=syncCfg();if(!cfg)return;
+ if(SYNC.pin&&syncCryptoOk()){
+  var chk=await fetch(cfg.url,{headers:cfg.headers});
+  if(chk.ok){
+   var cb=await chk.json();
+   if(cb&&cb.enc==='aesgcm'){
+    var k2=await syncKey(cb.salt);
+    await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(cb.iv)},k2,unb64(cb.ct));
+   }
+  }
+ }
+ var pl=syncPayload(),body=pl,headers=Object.assign({},cfg.headers);
+ if(SYNC.pin&&syncCryptoOk()){
+  if(!SYNC.salt){SYNC.salt=b64(crypto.getRandomValues(new Uint8Array(16)));syncPersist();}
+  var key=await syncKey(SYNC.salt),iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,new TextEncoder().encode(JSON.stringify(pl)));
+  body={v:1,enc:'aesgcm',salt:SYNC.salt,iv:b64(iv),ct:b64(new Uint8Array(ct))};
+ }
+ headers['Content-Type']='application/json';
+ var r=await fetch(cfg.url,{method:'PUT',headers:headers,body:JSON.stringify(body)});
+ if(!r.ok)throw new Error('HTTP '+r.status);
+ SYNC.last=Date.now();SYNC.state='ok';syncStatus();
+}
+async function syncPull(){
+ var cfg=syncCfg();if(!cfg)return;
+ var r=await fetch(cfg.url,{headers:cfg.headers});
+ if(r.status===404){SYNC.state='ok';syncStatus();return;}
+ if(!r.ok)throw new Error('HTTP '+r.status);
+ var body=await r.json(),pl=body;
+ if(body&&body.enc==='aesgcm'){
+  if(!SYNC.pin)throw new Error('PIN needed');
+  var key=await syncKey(body.salt);
+  var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(body.iv)},key,unb64(body.ct));
+  pl=JSON.parse(new TextDecoder().decode(pt));
+ }
+ if(!pl||!pl.shifts)return;
+ var changed=false;
+ Object.keys(pl.shifts).forEach(function(k){
+  var rem=pl.shifts[k];if(!rem)return;
+  var local=SYNC.ts[k]||0;
+  if(!local||(rem.ts||0)>local){syncApply(k,rem);SYNC.ts[k]=rem.ts||0;changed=true;}
+ });
+ if(changed){syncPersist();if(typeof build==='function')build(CUR);if(typeof renderSummary==='function')renderSummary();}
+ SYNC.last=Date.now();SYNC.state='ok';syncStatus();
+}
+function syncErr(e){SYNC.state='err';syncStatus(String(e&&e.message||e));}
+var syncTimer=null;
+function syncTouch(k){
+ if(SYNC.applying)return;
+ SYNC.ts[k]=Date.now();syncPersist();
+ clearTimeout(syncTimer);syncTimer=setTimeout(function(){SYNC.state='busy';syncStatus();syncPush().catch(syncErr)},1200);
+ SYNC.state='busy';syncStatus();
+}
+/* hook the app's own save so every change is pushed */
+(function(){
+ if(typeof window.sset!=='function')return;
+ var orig=window.sset;
+ window.sset=function(k,v){
+  var r=orig.apply(this,arguments);
+  if(k==='shiftrep_v1'||k==='shiftrep_x1')syncTouch(typeof CUR!=='undefined'?CUR:'A');
+  return r;
+ };
+})();
+async function syncNow(){SYNC.state='busy';syncStatus();try{await syncPull();await syncPush();}catch(e){syncErr(e)}}
+/* ---------------- sync panel ---------------- */
+function syncPanel(){
+ if(document.getElementById('syncPanel'))return;
+ var d=document.createElement('div');
+ d.id='syncPanel';d.className='syncwrap';d.setAttribute('hidden','');
+ d.innerHTML='<div class="syncbox"><div class="sbh"><b>Cloud sync</b><button id="syncClose" type="button">&times;</button></div>'+
+  '<p class="hint">Same sync code + same PIN on both devices = same data. The PIN encrypts the copy in the cloud.</p>'+
+  '<label class="sl">Sync code<textarea id="syncCode" rows="2" spellcheck="false" placeholder="https://...|master-key"></textarea></label>'+
+  '<label class="sl">PIN (optional)<input id="syncPin" type="password" inputmode="numeric" placeholder="e.g. 4821"></label>'+
+  '<div class="srow"><button id="syncSave" class="cp" type="button">Save &amp; sync</button>'+
+  '<button id="syncNow" class="cp" type="button">Sync now</button>'+
+  '<button id="syncCopy" class="cp" type="button">Copy code</button></div>'+
+  '<div class="hint" id="syncMsg"></div></div>';
+ document.body.appendChild(d);
+ d.querySelector('#syncClose').onclick=function(){d.setAttribute('hidden','')};
+ d.querySelector('#syncCode').value=SYNC.code;
+ d.querySelector('#syncPin').value=SYNC.pin;
+ d.querySelector('#syncSave').onclick=function(){
+  SYNC.code=(d.querySelector('#syncCode').value||'').trim();
+  SYNC.pin=(d.querySelector('#syncPin').value||'').trim();
+  if(!SYNC.code){d.querySelector('#syncMsg').textContent='Enter the sync code first.';return;}
+  syncPersist();syncNow();
+  d.querySelector('#syncMsg').textContent='Saved. Running first sync...';
+ };
+ d.querySelector('#syncNow').onclick=function(){syncNow()};
+ d.querySelector('#syncCopy').onclick=function(){
+  var code=SYNC.code+(SYNC.pin?('|PIN:'+SYNC.pin):'');
+  try{
+   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code);
+    d.querySelector('#syncMsg').textContent='Copied - paste it on the other device.';}
+   else d.querySelector('#syncMsg').textContent='Copy the sync code + PIN manually.';
+  }catch(e){d.querySelector('#syncMsg').textContent='Copy the sync code + PIN manually.'}
+ };
+}
+(function(){
+ syncLoad();
+ var btn=document.getElementById('syncBtn');
+ if(btn)btn.onclick=function(){syncPanel();var p=document.getElementById('syncPanel');if(p)p.removeAttribute('hidden')};
+ syncStatus();
+ if(syncCfg()){
+  syncPull().catch(syncErr);
+  setInterval(function(){if(!document.hidden)syncPull().catch(syncErr)},45000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)syncPull().catch(syncErr)});
+ }
 })();
 </script>
 </body>

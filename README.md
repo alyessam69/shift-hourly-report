@@ -30,3 +30,17 @@ In Process Report and Daily Noodles sheets, and Export to Excel. Works offline o
 - Updating the app: replace `index.html` on GitHub and change `CACHE = 'shift-report-v1'` in `sw.js`
   to `v2`, `v3` ... so installed copies pick up the new version (close and reopen the app once or twice).
 - Everything is plain static files - no build step and no external libraries.
+
+## Cloud sync (phone <-> PC)
+
+The app works offline and stores everything on the device. To use the **same data on two devices** (phone and PC):
+
+1. Create a free JSON bin at **jsonbin.io** (sign up, *Create new bin*) - copy the **Bin ID** and the **Master Key**.
+2. On the first device: **Sync** in the header -> paste the sync code `https://api.jsonbin.io/v3/b/<BIN_ID>|<MASTER_KEY>` and choose a **PIN**, then *Save & sync*.
+3. Tap **Copy code** and move it to the second device (WhatsApp/email/cable), paste it there with the **same PIN**.
+
+What happens:
+- Every change is pushed to the cloud (encrypted with the PIN) and pulled from it on open and every 45 s.
+- Data is merged **per shift** by timestamp, so both devices can work without overwriting each other.
+- The cloud only ever holds ciphertext (AES-GCM + PBKDF2), and the app refuses to overwrite data it cannot decrypt.
+- Without a sync code the app behaves exactly as before (offline only).
