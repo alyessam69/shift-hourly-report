@@ -241,7 +241,19 @@ function copyBlk(blk,btn){
  c.style.width='';
  var nc=blk.querySelectorAll('.nocopy');[].forEach.call(nc,function(x){x.style.display='none'});
  var txt=blk.innerText;[].forEach.call(nc,function(x){x.style.display=''});
- copyOut(scaleHtml(c.outerHTML,sizeF()),txt,btn);
+ copyOut(olFix(scaleHtml(c.outerHTML,sizeF())),txt,btn);
+}
+function olFix(h){
+ /* Outlook / Word read the height attribute in POINTS, not pixels, so every
+    row came out a third taller and the margin on a table is ignored -> the
+    tables looked huge and stuck together. Let Outlook size the rows from the
+    content and put a real gap between the tables. */
+ h=h.replace(/\sheight="[\d.]+"/g,'');
+ h=h.replace(/height:[\d.]+px;/g,'height:auto;');
+ h=h.replace(/padding:0 2px/g,'padding:2px 3px');
+ h=h.replace(/margin:0 0 24px 0/g,'');
+ h=h.replace(/<\/table>/g,'</table><p style="margin:0;padding:0;line-height:12px;font-size:10px">&nbsp;</p>');
+ return h;
 }
 function copyOut(html,txt,btn){
  function done(){btn.textContent='Copied \u2713';btn.classList.add('ok');toast('Copied \u2013 paste in Outlook');setTimeout(function(){btn.textContent='Copy';btn.classList.remove('ok')},1800)}
