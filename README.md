@@ -35,9 +35,11 @@ In Process Report and Daily Noodles sheets, and Export to Excel. Works offline o
 
 The app works offline and stores everything on the device. To use the **same data on two devices** (phone and PC):
 
-1. Create a free JSON bin at **jsonbin.io** (sign up, *Create new bin*) - copy the **Bin ID** and the **Master Key**.
-2. On the first device: **Sync** in the header -> paste the sync code `https://api.jsonbin.io/v3/b/<BIN_ID>|<MASTER_KEY>` and choose a **PIN**, then *Save & sync*.
-3. Tap **Copy code** and move it to the second device (WhatsApp/email/cable), paste it there with the **same PIN**.
+1. The Firebase Realtime Database URL is **already configured** in the app, so on every device you only need a **PIN**:
+   **Sync** in the header -> type a PIN (same on every device) -> *Save & sync*.
+2. Tap **Copy code** and move it to the second device (WhatsApp/email/cable) and paste it there with the **same PIN**.
+3. A PIN is **required**: the copy in the cloud is always encrypted (AES-GCM), never plain JSON.
+   (You can still paste a different backend - e.g. a JSONBin `URL|master-key` - in the same field.)
 
 What happens:
 - Every change is pushed to the cloud (encrypted with the PIN) and pulled from it on open and every 45 s.
