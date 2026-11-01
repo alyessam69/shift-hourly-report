@@ -333,7 +333,10 @@ function autoTfmCards(){
  [].forEach.call(document.querySelectorAll('.card'),function(c){
   if(c._h==null||c._tm)return;
   var cells=c.querySelectorAll('.blk td[contenteditable]');
-  if(!(c._samp&&c.querySelector('.ck').checked&&c._t3===c._time&&cells.length>=12))return;
+  /* the TFM is calculated in every card that carries a Plodder table - also in
+     the 'Add last Plodder table' cards, where the Cl/Gly/EDTA were copied in.
+     The old condition (sample card + hour identical) left those cells empty. */
+  if(!(c.querySelector('.ck').checked&&cells.length>=12))return;
   var a=[].map.call(cells,cellTxt),r=tfmCore(a[3],a[4],a[5],a[8],a[9],a[10]),T=cells[11];
   if(T===document.activeElement)return;
   if(!r.miss.length)T.innerHTML=r.val.toFixed(2);else if(T.textContent.trim()!=='')T.innerHTML='&nbsp;';
