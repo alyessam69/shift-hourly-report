@@ -57,3 +57,5 @@ What happens:
    `https://PROJECT-default-rtdb.firebaseio.com/lab/<random-string>.json`
 5. In the app: **Sync** -> paste that URL as the *sync code*, choose a **PIN**, *Save & sync*.
    No API key is needed: the secret path + the PIN are the protection.
+
+<!-- build trigger 1793524940 -->
