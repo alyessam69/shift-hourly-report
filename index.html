@@ -264,7 +264,6 @@ function vals(kind,d,X){
   function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||(k==='P'&&e===COLDEF))){auto[k]=1;return val}return e!==undefined?e:''}
   v.N=ga('N',rv&&rv.iv);v.O=ga('O',rv&&rv.ti);v.P=ga('P',rv&&rv.col);
   PL_EX.forEach(function(k){ed[k]=1});
-  var m=num(v.F),f=num(v.H);if(m!==null&&m>14.85)red.F=1;if(f!==null&&f>0.05)red.H=1;
  }
  return{v:v,red:red,ed:ed,auto:auto};
 }
