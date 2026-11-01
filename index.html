@@ -483,12 +483,14 @@ if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.add
    Setting a PIN encrypts the cloud copy (AES-GCM + PBKDF2).               */
 var SYNC={code:'',pin:'',salt:'',ts:{},last:0,state:'off',applying:false};
 var DEFCODE='https://soap-lab-shift-sync-default-rtdb.europe-west1.firebasedatabase.app/lab/shift-40266e02ffb7ac507bcc846a.json';
+var DEFPIN='2780';
 function sRead(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}}
 function sWrite(k,v){try{localStorage.setItem(k,v)}catch(e){}}
 function syncLoad(){
  try{
   SYNC.code=sRead('shiftrep_sync_code','');
-  SYNC.pin=sRead('shiftrep_sync_pin','');
+  var _p=sRead('shiftrep_sync_pin',null);
+  SYNC.pin=(_p===null?DEFPIN:_p);
   SYNC.salt=sRead('shiftrep_sync_salt','');
   SYNC.ts=JSON.parse(sRead('shiftrep_sync_ts','{}'))||{};
  }catch(e){}
@@ -603,7 +605,7 @@ function syncPanel(){
  var d=document.createElement('div');
  d.id='syncPanel';d.className='syncwrap';d.setAttribute('hidden','');
  d.innerHTML='<div class="syncbox"><div class="sbh"><b>Cloud sync</b><button id="syncClose" type="button">&times;</button></div>'+
-  '<p class="hint">Same sync code + same PIN on both devices = same data. The PIN encrypts the copy in the cloud.<br>Firebase: paste the database URL + path (no key needed). JSONBin: URL + | + master key.</p>'+
+  '<p class="hint" id="syncHint">Sync is ON - the PIN is already set, you only enter it once per device.<br>Data is encrypted (AES-GCM) before it leaves the device.<br>Want another cloud? Paste a different URL here (Firebase URL, or JSONBin URL|master key).</p>'+
   '<label class="sl">Sync code<textarea id="syncCode" rows="2" spellcheck="false" placeholder="https://PROJECT-default-rtdb.firebaseio.com/lab/SECRET.json  |  https://api.jsonbin.io/v3/b/ID|KEY"></textarea></label>'+
   '<label class="sl">PIN (optional)<input id="syncPin" type="password" inputmode="numeric" placeholder="e.g. 4821"></label>'+
   '<div class="srow"><button id="syncSave" class="cp" type="button">Save &amp; sync</button>'+
@@ -614,6 +616,9 @@ function syncPanel(){
  d.querySelector('#syncClose').onclick=function(){d.setAttribute('hidden','')};
  d.querySelector('#syncCode').value=SYNC.code||DEFCODE;
  d.querySelector('#syncPin').value=SYNC.pin;
+ d.querySelector('#syncHint').textContent=SYNC.pin
+  ? 'Sync is ON. The PIN is saved on this device - you will not be asked for it again.'
+  : 'Sync is OFF. Enter a PIN to encrypt and enable the cloud sync.';
  d.querySelector('#syncSave').onclick=function(){
   SYNC.code=(d.querySelector('#syncCode').value||'').trim()||DEFCODE;
   SYNC.pin=(d.querySelector('#syncPin').value||'').trim();
