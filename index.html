@@ -601,8 +601,8 @@ function syncPanel(){
  var d=document.createElement('div');
  d.id='syncPanel';d.className='syncwrap';d.setAttribute('hidden','');
  d.innerHTML='<div class="syncbox"><div class="sbh"><b>Cloud sync</b><button id="syncClose" type="button">&times;</button></div>'+
-  '<p class="hint">Same sync code + same PIN on both devices = same data. The PIN encrypts the copy in the cloud.</p>'+
-  '<label class="sl">Sync code<textarea id="syncCode" rows="2" spellcheck="false" placeholder="https://...|master-key"></textarea></label>'+
+  '<p class="hint">Same sync code + same PIN on both devices = same data. The PIN encrypts the copy in the cloud.<br>Firebase: paste the database URL + path (no key needed). JSONBin: URL + | + master key.</p>'+
+  '<label class="sl">Sync code<textarea id="syncCode" rows="2" spellcheck="false" placeholder="https://PROJECT-default-rtdb.firebaseio.com/lab/SECRET.json  |  https://api.jsonbin.io/v3/b/ID|KEY"></textarea></label>'+
   '<label class="sl">PIN (optional)<input id="syncPin" type="password" inputmode="numeric" placeholder="e.g. 4821"></label>'+
   '<div class="srow"><button id="syncSave" class="cp" type="button">Save &amp; sync</button>'+
   '<button id="syncNow" class="cp" type="button">Sync now</button>'+

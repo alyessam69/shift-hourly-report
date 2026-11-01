@@ -44,3 +44,16 @@ What happens:
 - Data is merged **per shift** by timestamp, so both devices can work without overwriting each other.
 - The cloud only ever holds ciphertext (AES-GCM + PBKDF2), and the app refuses to overwrite data it cannot decrypt.
 - Without a sync code the app behaves exactly as before (offline only).
+
+### Using Firebase Realtime Database (recommended)
+
+1. [console.firebase.google.com](https://console.firebase.google.com) -> **Add project** (a Google account is enough).
+2. **Build -> Realtime Database -> Create Database** -> pick a location.
+3. **Rules** tab -> paste and publish:
+```json
+{ "rules": { "lab": { ".read": true, ".write": true } } }
+```
+4. Copy the database URL, e.g. `https://PROJECT-default-rtdb.firebaseio.com` and append a secret path:
+   `https://PROJECT-default-rtdb.firebaseio.com/lab/<random-string>.json`
+5. In the app: **Sync** -> paste that URL as the *sync code*, choose a **PIN**, *Save & sync*.
+   No API key is needed: the secret path + the PIN are the protection.
