@@ -154,7 +154,7 @@ function t2(){return tbl('Plodder','#574967',SP2,['Moisture %','FFA%','FA%','Y+5
 var COLDEF='0.2 R / 1.1Y';
 function shf(){var o=xs().sh||{};function i(f,l,ph,dv){var v=(o[f]!==undefined&&o[f]!==null&&o[f]!=='')?o[f]:(dv||'');return '<label>'+l+'<br><input data-f="'+f+'" inputmode="decimal" placeholder="'+ph+'" value="'+esc(v)+'"></label>'}
  return '<div class="shf nocopy">Shift analyses \u2013 type once, used for both samples (not copied)<div class="row">'+i('iv','IV','42.2')+i('ti','Titre','45.5')+i('col','Color',COLDEF,COLDEF)+'</div></div>'}
-function t3c(card,time){return (card._samp&&time===card._time?shf():'')+t3(time)}
+function t3c(card,time){return shf()+t3(time)}
 function t3(time){return tbl('Plodder (<span class="t3ed" contenteditable="true" spellcheck="false" title="Tap to change the hour of this Plodder analysis">'+time+'</span>)','#2d4f70',SP3,['CL %','Gly%','EDTA%','TFM'],['','','',''])}
 function cellTxt(x){return x.textContent.replace(/\u00a0/g,'').trim()}
 function load(){try{return JSON.parse(sget(KEY))||{}}catch(e){return {}}}
@@ -275,7 +275,7 @@ function xs(){return loadX()[CUR]||{}}
 function putX(fn){try{var X=loadX(),o=X[CUR]||{};fn(o);X[CUR]=o;sset(XK,JSON.stringify(X))}catch(e){}}
 function todayISO(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
 function dtxt(iso,fmt){var p=(iso||todayISO()).split('-');return fmt==='mdy'?p[1]+'-'+p[2]+'-'+p[0]:p[2]+'-'+p[1]+'-'+p[0]}
-function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c._samp&&c.querySelector('.ck').checked&&c._t3===c._time&&a.length>=12);out.push({h:c._h,own:own,a:a,c:c})});return out}
+function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,a:a,c:c})});return out}
 function num(v){var n=parseFloat(v);return isNaN(n)?null:n}
 function vals(kind,d,X){
  var ex=(X.ex&&X.ex[d.h]&&X.ex[d.h][kind])||{};
