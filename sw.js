@@ -43,7 +43,9 @@ self.addEventListener('fetch', (e) => {
 
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
+      // cache:'reload' bypasses the browser + CDN cache, so a deploy is never
+      // hidden behind the 10 minute max-age that GitHub Pages sends
+      fetch(req, { cache: 'reload' })
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();
