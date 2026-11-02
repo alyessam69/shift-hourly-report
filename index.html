@@ -275,7 +275,7 @@ var RCOLS=[['B',379],['C',126],['D',219],['E',287],['F',224],['G',140],['H',96],
 var PCOLS=[['B',113],['C',88],['D',83],['E',112],['F',74],['G',46],['H',65],['I',70],['J',76],['K',62],['L',44],['M',58],['N',58],['O',73],['P',128],['Q',66],['R',133]].map(function(a){return{k:a[0],w:a[1]}});
 function prng(str){var h=1779033703^str.length;for(var i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19}var a=h>>>0;return function(){a=(a+0x6D2B79F5)|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function rnd(X,h){var sh=X.sh||{},tol=parseFloat((X.rb||{}).tol);if(isNaN(tol))tol=0.1;
- var R=prng(CUR+'|'+(X.date||todayISO())+'|'+h+'|'+(X.seed||0));
+ var R=prng(CUR+'|'+curISO()+'|'+h+'|'+(X.seed||0));
  function j(v,dec){var b=parseFloat(v);if(isNaN(b))return '';return (b+(R()*2-1)*tol).toFixed(dec)}
  return{iv:j(sh.iv,2),ti:j(sh.ti,1),col:String(sh.col||COLDEF).trim()}}
 function sumW(a){var t=0;a.forEach(function(c){t+=c.w});return t}
@@ -286,13 +286,20 @@ function loadX(){try{return JSON.parse(sget(XK))||{}}catch(e){return {}}}
 function xs(){return loadX()[CUR]||{}}
 function putX(fn){try{var X=loadX(),o=X[CUR]||{};fn(o);X[CUR]=o;sset(XK,JSON.stringify(X))}catch(e){}}
 function todayISO(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
-function dtxt(iso,fmt){var p=(iso||todayISO()).split('-');return fmt==='mdy'?p[1]+'-'+p[2]+'-'+p[0]:p[2]+'-'+p[1]+'-'+p[0]}
+function dmY(iso){var p=(iso||todayISO()).split('-');return p[2]+'/'+p[1]+'/'+p[0]}
+function isoFromDMY(s){var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||'').trim());if(!m)return todayISO();var d=+m[1],mo=+m[2],y=+m[3];if(mo<1||mo>12||d<1||d>31)return todayISO();var dt=new Date(y,mo-1,d);if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return todayISO();return y+'-'+('0'+mo).slice(-2)+'-'+('0'+d).slice(-2)}
+var XDATE='';
+function curISO(){return XDATE||todayISO()}
+function curDMY(){return dmY(curISO())}
+function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
+var _day=todayISO();setInterval(function(){var d=todayISO();if(d!==_day){_day=d;refreshDates()}},30000);
+function dtxt(iso,fmt){var p=(iso||curISO()).split('-');return fmt==='mdy'?p[1]+'/'+p[2]+'/'+p[0]:p[2]+'/'+p[1]+'/'+p[0]}
 function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,a:a,c:c})});return out}
 function num(v){var n=parseFloat(v);return isNaN(n)?null:n}
 function vals(kind,d,X){
  var ex=(X.ex&&X.ex[d.h]&&X.ex[d.h][kind])||{};
  function g(k,def){return ex[k]!==undefined?ex[k]:def}
- var v={B:dtxt(X.date,X.fmt),C:d.h+':00'},red={},ed={},auto={};
+ var v={B:dtxt(curISO(),X.fmt),C:d.h+':00'},red={},ed={},auto={};
  if(kind==='r'){
   v.D='Reactor';v.G=d.a[0];v.H=d.a[1];v.I=d.a[2];
   RED_EX.forEach(function(k){v[k]=g(k,(k==='R'||k==='S')?'':'N/A');ed[k]=1});
@@ -389,14 +396,14 @@ window.addEventListener('resize',applyZoom);
 function sbox(id,t){return '<div class="card"><div class="bar"><b>'+t+'</b><button class="cp" data-c="'+id+'">Copy</button></div><div class="sc2"><div class="zw" id="zw'+id+'"><div id="t'+id+'"></div></div></div></div>'}
 function buildSummary(m){
  var X=xs(),s=document.createElement('section');s.id='sum';
- s.innerHTML='<h2>Shift '+CUR+' \u2013 summary tables</h2><div class="ctl"><label>Date <input type="date" id="sd"></label><label>Format <select id="sf"><option value="dmy">DD-MM-YYYY</option><option value="mdy">MM-DD-YYYY</option></select></label><span class="zb"><button data-z="fit">Fit</button><button data-z="0.5">50%</button><button data-z="1">100%</button></span></div>'
+ s.innerHTML='<h2>Shift '+CUR+' \u2013 summary tables</h2><div class="ctl"><label>Date <input type="text" id="sd" placeholder="DD/MM/YYYY"></label><label>Format <select id="sf"><option value="dmy">DD-MM-YYYY</option><option value="mdy">MM-DD-YYYY</option></select></label><span class="zb"><button data-z="fit">Fit</button><button data-z="0.5">50%</button><button data-z="1">100%</button></span></div>'
   +'<details class="rnd"><summary>Random range for IV / Titre</summary><div class="ctl"><label>\u00b1 <input type="number" step="0.05" id="rbtol"></label><button class="cp" id="rr">Re-randomize</button></div></details>'
   +sbox('R','Reactor 72% sheet')+sbox('P','Plodder sheet')+'<div class="hint" id="tc" style="padding:0 0 8px"></div>'
   +'<div class="hint" style="padding:0 0 14px">Rows are built from the hourly cards above. Tinted cells are the other analyses \u2013 tap to edit, they are saved too. IV and Titre are random (\u00b1 around the values you type in the Plodder sample cards); Color is copied as written. All three appear on both sampled hours. Copy gives data rows only, formatted like the sheet.</div>';
  m.appendChild(s);
  var sd=s.querySelector('#sd'),sf=s.querySelector('#sf');
- sd.value=X.date||todayISO();sf.value=X.fmt||'dmy';
- sd.onchange=function(){putX(function(o){o.date=sd.value});renderSummary()};
+ sd.value=curDMY();sf.value=X.fmt||'dmy';
+ sd.onchange=function(){XDATE=isoFromDMY(sd.value);sd.dataset.touched='1';renderSummary()};
  sf.onchange=function(){putX(function(o){o.fmt=sf.value});renderSummary()};
  var tolEl=s.querySelector('#rbtol'),tv=(X.rb||{}).tol;tolEl.value=(tv===undefined||tv==='')?0.1:tv;tolEl.onchange=function(){putX(function(o){o.rb=o.rb||{};o.rb.tol=tolEl.value});renderSummary()};
  s.querySelector('#rr').onclick=function(){putX(function(o){o.seed=(o.seed||0)+1});renderSummary();toast('New random values')};
@@ -446,7 +453,7 @@ function toXlsx(sheets){
     else x+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(c.v)+'</t></is></c>'});
    x+='</row>'});
   return x+'</sheetData></worksheet>'}); 
- var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet '+NS+'><numFmts count="3"><numFmt numFmtId="164" formatCode="dd\\-mm\\-yyyy"/><numFmt numFmtId="165" formatCode="mm\\-dd\\-yyyy"/><numFmt numFmtId="166" formatCode="h:mm"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+borders.length+'">'+borders.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+ var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet '+NS+'><numFmts count="3"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="mm/dd/yyyy"/><numFmt numFmtId="166" formatCode="h:mm"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+borders.length+'">'+borders.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
  var wbx='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook '+NS+' '+RN+'><sheets>'+sheets.map(function(sh,i){return '<sheet name="'+xesc(sh.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+'</sheets></workbook>';
  var rel='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map(function(sh,i){return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+'<Relationship Id="rId'+(sheets.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
  var ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+sheets.map(function(sh,i){return '<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'}).join('')+'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
@@ -459,7 +466,7 @@ function rgbHex(v){if(!v)return null;var m=/rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec
 function bwid(v){return parseFloat(v)>=2?'medium':'thin'}
 function extractSheet(kind,name){
  var tb=document.querySelector('#t'+kind+' table');if(!tb)return null;
- var X=xs(),iso=X.date||todayISO(),p=iso.split('-'),serial=Math.round(Date.UTC(+p[0],+p[1]-1,+p[2])/86400000)+25569,dfmt=X.fmt==='mdy'?165:164;
+ var X=xs(),iso=curISO(),p=iso.split('-'),serial=Math.round(Date.UTC(+p[0],+p[1]-1,+p[2])/86400000)+25569,dfmt=X.fmt==='mdy'?165:164;
  var cols=kind==='R'?RCOLS:PCOLS,widths=cols.map(function(c){return Math.round((c.w-5)/7*10)/10});
  var rows=[];
  [].forEach.call(tb.querySelectorAll('tr'),function(tr){
@@ -484,7 +491,7 @@ async function exportXlsx(kind){
  if(!dl)dl={save:function(o){return new Promise(function(res){var b=o.data instanceof Blob?o.data:new Blob([o.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(u);a.remove()},2000);res({status:'saved'})})}};
  var sh=[];if(kind==='R'||kind==='B')sh.push(extractSheet('R','Reactor'));if(kind==='P'||kind==='B')sh.push(extractSheet('P','Plodder'));
  sh=sh.filter(Boolean);if(!sh.length){toast('Nothing to export');return}
- var X=xs(),nm='Shift_'+CUR+'_'+(kind==='R'?'Reactor_':kind==='P'?'Plodder_':'')+(X.date||todayISO())+'.xlsx';
+ var X=xs(),nm='Shift_'+CUR+'_'+(kind==='R'?'Reactor_':kind==='P'?'Plodder_':'')+curDMY().replace(/\//g,'-')+'.xlsx';
  try{await dl.save({filename:nm,data:toXlsx(sh)});toast('Saved')}catch(e){if(!e||e.code!=='declined')toast('Could not save the file')}
 }
 
