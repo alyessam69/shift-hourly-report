@@ -307,11 +307,15 @@ function vals(kind,d,X){
  }else{
   v.D='Plodder';v.F=d.a[3];v.G=(d.a[4]==='N/A'?'':d.a[4]);v.H=d.a[5];
   v.I=d.own?d.a[8]:'';v.J=d.own?d.a[9]:'';v.K=d.own?d.a[10]:'';v.M=d.own?d.a[11]:'';
-  v.E=g('E','No rancid odor');v.L=g('L','');v.Q=g('Q','Present');v.R=g('R','');
+  v.E=g('E','No rancid odor');v.L=g('L','N/A');v.Q=g('Q','Present');v.R=g('R','');
   var rv=d.own?rnd(X,d.h):null;
   function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||(k==='P'&&e===COLDEF))){auto[k]=1;return val}return e!==undefined?e:''}
   v.N=ga('N',rv&&rv.iv);v.O=ga('O',rv&&rv.ti);v.P=ga('P',rv&&rv.col);
   PL_EX.forEach(function(k){ed[k]=1});
+  /* the cells with no data read N/A - the same convention as the Reactor table */
+  ['F','G','H','I','J','K','L','M','N','O','P'].forEach(function(k){
+   if(v[k]===''&&ex[k]===undefined)v[k]='N/A';
+  });
  }
  return{v:v,red:red,ed:ed,auto:auto};
 }
