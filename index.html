@@ -459,7 +459,7 @@ function rnd(X,h){var sh=X.sh||{},tol=parseFloat((X.rb||{}).tol);if(isNaN(tol))t
 function sumW(a){var t=0;a.forEach(function(c){t+=c.w});return t}
 var SHC={A:'#92CDDC',B:'#FAC090',C:'#E6B9B8'};
 var RED_EX=['E','F','J','K','L','M','N','O','P','Q','R','S'],PL_EX=['E','L','N','O','P','Q','R'];
-function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace/>/g,'&gt;')}
+function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function loadX(){try{return JSON.parse(sget(XK))||{}}catch(e){return {}}}
 function xs(){return loadX()[CUR]||{}}
 function putX(fn){try{var X=loadX(),o=X[CUR]||{};fn(o);X[CUR]=o;sset(XK,JSON.stringify(X))}catch(e){}}
@@ -512,7 +512,7 @@ function tableHTML(kind,data,X){
   var r=vals(kind,d,X),first=i===0,last=i===data.length-1,line=[];
   h+='<tr style="height:'+ht+'pt">';
   cols.forEach(function(c,ci){
-   var v=r.v[c.k];if(val==null)v='';
+   var v=r.v[c.k];if(v==null)v='';
    h+=tcell(v,{w:c.w,fs:(kind==='p'&&c.k==='B')?10:fs,ht:ht,bg:(kind==='r'&&c.k==='C')?SHC[CUR]:'',red:r.red[c.k],bt:first?2:1,bb:last?2:1,bl:ci===0?2:1,br:ci===cols.length-1?2:1,ed:r.ed[c.k],auto:r.auto&&r.auto[c.k],t:kind,h:d.h,k:c.k});
    line.push(v);
   });
@@ -693,7 +693,7 @@ function extractSheet(kind,name){
   rows.push({ht:ht,cells:cells})});
  return {name:name,widths:widths,rows:rows};
 }
-function expBar(){var d=document.className='exp';
+function expBar(){var d=document.createElement('div');d.className='exp';
  d.innerHTML='<span>Export to Excel \u2013 shift '+CUR+'</span><button data-x="R">Reactor</button><button data-x="P">Plodder</button><button data-x="S">Swing Noodles</button><button data-x="B">All</button>';
  [].forEach.call(d.querySelectorAll('button'),function(b){b.onclick=function(){exportXlsx(b.getAttribute('data-x'))}});
  return d}
@@ -703,12 +703,6 @@ async function exportXlsx(kind){
  var sh=[];if(kind==='R'||kind==='B')sh.push(extractSheet('R','Reactor'));if(kind==='P'||kind==='B')sh.push(extractSheet('P','Plodder'));if(kind==='S'||kind==='B')sh.push(extractSheet('S','Swing Noodles'));
  sh=sh.filter(Boolean);if(!sh.length){toast('Nothing to export');return}
  var X=xs(),nm='Shift_'+CUR+'_'+(kind==='R'?'Reactor_':kind==='P'?'Plodder_':kind==='S'?'Swing_Noodles_':'')+curDMY().replace(/\//g,'-')+'.xlsx';
- try{await dl.save({filename:nm,data:toXlsx(sh)});toast('Saved')}catch(e){if(!e||e.code!=='declined')toast('Could not save the file')}
-}
- if(!dl)dl={save:function(o){return new Promise(function(res){var b=o.data instanceof Blob?o.data:new Blob([o.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(u);a.remove()},2000);res({status:'saved'})})}};
- var sh=[];if(kind==='R'||kind==='B')sh.push(extractSheet('R','Reactor'));if(kind==='P'||kind==='B')sh.push(extractSheet('P','Plodder'));
- sh=sh.filter(Boolean);if(!sh.length){toast('Nothing to export');return}
- var X=xs(),nm='Shift_'+CUR+'_'+(kind==='R'?'Reactor_':kind==='P'?'Plodder_':'')+curDMY().replace(/\//g,'-')+'.xlsx';
  try{await dl.save({filename:nm,data:toXlsx(sh)});toast('Saved')}catch(e){if(!e||e.code!=='declined')toast('Could not save the file')}
 }
 
