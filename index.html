@@ -273,6 +273,184 @@ function copyOut(html,txt,btn){
 var XK='shiftrep_x1';
 var RCOLS=[['B',379],['C',126],['D',219],['E',287],['F',224],['G',140],['H',96],['I',156],['J',140],['K',96],['L',96],['M',96],['N',96],['O',96],['P',184],['Q',116],['R',404],['S',325]].map(function(a){return{k:a[0],w:a[1]}});
 var PCOLS=[['B',113],['C',88],['D',83],['E',112],['F',74],['G',46],['H',65],['I',70],['J',76],['K',62],['L',44],['M',58],['N',58],['O',73],['P',128],['Q',66],['R',133]].map(function(a){return{k:a[0],w:a[1]}});
+var SCOLS=[['B',67,'No.',''],['C',88,'Date',''],['D',80,'Mois','14-16'],['E',96,'FA','0.05'],['F',96,'FFA','NIL'],['G',96,'Color',''],['H',96,'T.Color','4.5 max'],['I',115,'Physical Status',''],['J',142,'Note',''],['K',80,'Shift','']].map(function(a){return{k:a[0],w:a[1],h:a[2],sp:a[3]}});
+function swBounds(shKey){
+ var allX=loadX(),k=shKey||CUR,X=allX[k]||{};
+ var defStart=1;
+ if(k==='B'){var bA=swBounds('A');defStart=bA.en+1}
+ else if(k==='C'){var bB=swBounds('B');defStart=bB.en+1}
+ var st=(X.swFrom!==undefined&&X.swFrom!==''&&+X.swFrom>=1)?Math.round(+X.swFrom):defStart;
+ var tons=(X.swTons!==undefined&&X.swTons!==''&&+X.swTons>=1)?Math.round(+X.swTons):60;
+ var en=(X.swTo!==undefined&&X.swTo!==''&&+X.swTo>=st)?Math.round(+X.swTo):(st+tons-1);
+ tons=en-st+1;
+ return{st:st,en:en,tons:tons};
+}
+function fmtSwCol(raw){
+ var s=String(raw||'').trim();if(!s||s==='N/A')return '';
+ var m=s.match(/(\d+(?:\.\d+)?)\s*[rR]?\s*\/\s*(\d+(?:\.\d+)?)\s*[yY]?/);
+ return m?(m[1]+'/'+m[2]):s;
+}
+function calcTCol(raw){
+ var s=String(raw||'').trim();if(!s||s==='N/A')return '';
+ var m=s.match(/(\d+(?:\.\d+)?)\s*[rR]?\s*\/\s*(\d+(?:\.\d+)?)\s*[yY]?/);
+ if(!m)return '';
+ var r=parseFloat(m[1]),y=parseFloat(m[2]);
+ if(isNaN(r)||isNaN(y))return '';
+ return String(Math.round((y+5*r)*100)/100);
+}
+function swBucketMois(m0,tol,cnt,dir,R){
+ var base=Math.round(m0*100),span=Math.max(1,Math.round(tol*100));
+ var a=base-span,b=base+span,pool=[];
+ for(var x=a;x<=b;x++){if(x%10!==0&&x!==base)pool.push(x)}
+ if(pool.length<cnt){for(var x2=a;x2<=b;x2++){if(pool.indexOf(x2)<0)pool.push(x2)}}
+ var picked=[],used={};
+ for(var i=0;i<cnt;i++){
+  var subLo=0,subHi=pool.length-1;
+  if(cnt>1&&dir!==0){
+   var seg=pool.length/cnt;
+   var idx=dir>0?i:(cnt-1-i);
+   subLo=Math.floor(idx*seg);
+   subHi=Math.min(pool.length-1,Math.floor((idx+1)*seg)-1);
+   if(subHi<subLo)subHi=subLo;
+  }
+  var choices=[];
+  for(var j=subLo;j<=subHi;j++){if(!used[pool[j]])choices.push(pool[j])}
+  if(!choices.length){for(var j2=0;j2<pool.length;j2++){if(!used[pool[j2]])choices.push(pool[j2])}}
+  if(!choices.length)choices=pool;
+  var val=choices[Math.floor(R()*choices.length)];
+  used[val]=1;picked.push(val);
+ }
+ if(dir>0)picked.sort(function(u,v){return u-v});
+ else if(dir<0)picked.sort(function(u,v){return v-u});
+ return picked.map(function(p){return (p/100).toFixed(2)});
+}
+function hasPlodderRow(d){
+ if(!d||!d.a)return false;
+ var m0=num(d.a[3]),ffa=(d.a[4]==='N/A'?'':String(d.a[4]||'').trim()),fa=(d.a[5]==='N/A'?'':String(d.a[5]||'').trim()),y5r=String(d.a[6]||'').trim();
+ return (m0!==null||ffa!==''||fa!==''||y5r!=='');
+}
+function swingRows(data,X){
+ var br=swBounds(CUR),st=br.st,en=br.en,tons=br.tons;
+ var tol=parseFloat((X.rb||{}).tol);
+ if(isNaN(tol)||tol<=0)tol=0.1;if(tol>0.1)tol=0.1;
+ var inc1=(X.sw1!==undefined)?!!X.sw1:true;
+ var swEx=X.sw||{};
+ var lastY5R='';
+ data.forEach(function(d){if(d&&d.a&&d.a[6]&&d.a[6].trim()!=='')lastY5R=d.a[6].trim()});
+ var sampBags=[];
+ for(var n=st;n<=en;n++){
+  var off=n-st+1;
+  if((off===1&&inc1)||(off%5===0))sampBags.push(n);
+ }
+ var active=data.filter(hasPlodderRow);
+ var H=active.length,S=sampBags.length;
+ var bagToHr={},hrBuckets={};
+ if(H>0&&S>0){
+  var q=Math.floor(S/H),remB=S%H;
+  for(var k=0;k<S;k++){
+   var hIdx;
+   if(q===0){
+    hIdx=Math.min(H-1,Math.floor(k*H/S));
+   }else{
+    var split=remB*(q+1);
+    if(k<split)hIdx=Math.floor(k/(q+1));
+    else hIdx=remB+Math.floor((k-split)/q);
+    if(hIdx>=H)hIdx=H-1;
+   }
+   var bagNo=sampBags[k];
+   bagToHr[bagNo]=hIdx;
+   hrBuckets[hIdx]=hrBuckets[hIdx]||[];
+   hrBuckets[hIdx].push(bagNo);
+  }
+ }
+ var bagMois={};
+ for(var hi=0;hi<H;hi++){
+  var d=active[hi],bList=hrBuckets[hi]||[];
+  if(!d||!bList.length)continue;
+  var m0=num(d.a[3]);
+  if(m0===null)continue;
+  var dNext=(hi+1<H)?active[hi+1]:null,dPrev=(hi>0)?active[hi-1]:null;
+  var mNext=dNext?num(dNext.a[3]):null,mPrev=dPrev?num(dPrev.a[3]):null;
+  var dir=0;
+  if(mNext!==null&&mNext!==m0)dir=mNext>m0?1:-1;
+  else if(mPrev!==null&&mPrev!==m0)dir=m0>mPrev?1:-1;
+  var R=prng(CUR+'|sw|'+curISO()+'|hr'+hi+'|'+tons+'|'+(X.seed||0));
+  var mVals=swBucketMois(m0,tol,bList.length,dir,R);
+  for(var bi=0;bi<bList.length;bi++)bagMois[bList[bi]]=mVals[bi];
+ }
+ var rows=[];
+ for(var n2=st;n2<=en;n2++){
+  var v={B:'B'+n2,C:dtxt(curISO(),X.fmt),D:'',E:'',F:'',G:'',H:'',I:'Good ',J:'Good ',K:CUR},auto={I:1,J:1};
+  var hI=bagToHr[n2];
+  if(hI!==undefined&&active[hI]){
+   var d2=active[hI];
+   var ffa=(d2.a[4]==='N/A'?'':String(d2.a[4]||'').trim()),fa=(d2.a[5]==='N/A'?'':String(d2.a[5]||'').trim());
+   if(bagMois[n2]!==undefined){v.D=bagMois[n2];auto.D=1}
+   if(fa!==''){v.E=fa;auto.E=1}
+   if(ffa!==''){v.F=ffa;auto.F=1}
+   var exP=(X.ex&&X.ex[d2.h]&&X.ex[d2.h].p)||{};
+   var rawCol=(exP.P&&exP.P!=='N/A')?exP.P:((X.sh&&X.sh.col)||COLDEF);
+   var fc=fmtSwCol(rawCol);
+   if(fc){v.G=fc;auto.G=1}
+   var y5r=String(d2.a[6]||'').trim()||lastY5R||calcTCol(rawCol);
+   if(y5r){v.H=y5r;auto.H=1}
+  }
+  var ov=swEx[n2]||{};
+  SCOLS.forEach(function(c){
+   if(c.k==='B'||c.k==='C'||c.k==='K')return;
+   if(ov[c.k]!==undefined){v[c.k]=ov[c.k];delete auto[c.k]}
+  });
+  var faNum=num(v.E),red={};
+  if(faNum!==null&&faNum>0.08){
+   red.E=1;
+   if(auto.J){v.J='HOLD High FA'}
+  }
+  rows.push({n:n2,v:v,auto:auto,red:red});
+ }
+ return rows;
+}
+function swingTableHTML(data,X){
+ var rows=swingRows(data,X),W=sumW(SCOLS),ht=14.25,tsv=[];
+ var h='<table class="swdata" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;width:'+W+'px"><colgroup>';
+ SCOLS.forEach(function(c){h+='<col width="'+c.w+'" style="width:'+c.w+'px">'});
+ h+='</colgroup>';
+ if(CUR==='A'){
+  h+='<tr style="height:14.25pt">';
+  var h1=[];
+  SCOLS.forEach(function(c){
+   h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:#BDD7EE;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.h)+'</td>';
+   h1.push(c.h);
+  });
+  h+='</tr><tr style="height:14.25pt">';
+  tsv.push(h1.join('\t'));
+  var h2=[];
+  SCOLS.forEach(function(c){
+   var bg=(c.sp||c.k==='G')?'#BDD7EE':'#ffffff';
+   h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:'+bg+';color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.sp)+'</td>';
+   h2.push(c.sp);
+  });
+  h+='</tr>';
+  tsv.push(h2.join('\t'));
+ }
+ rows.forEach(function(r){
+  var line=[];
+  h+='<tr style="height:'+ht+'pt">';
+  SCOLS.forEach(function(c){
+   var val=r.v[c.k];if(val==null)val='';
+   var isEd=(c.k!=='B'&&c.k!=='C'&&c.k!=='K');
+   var bg=(c.k==='K')?'#BDD7EE':'#ffffff';
+   var fg=(r.red&&r.red[c.k])?'#FF0000':'#000000';
+   var mso=(c.k==='G'||c.k==='B')?'mso-number-format:\"\\@\";':'';
+   var st='width:'+c.w+'px;height:'+ht+'pt;background-color:'+bg+';color:'+fg+';font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000;'+mso;
+   var attr=isEd?' contenteditable="true" class="ex" data-t="s" data-h="'+r.n+'" data-k="'+c.k+'"'+(r.auto[c.k]?' data-auto="1"':''):' class="dv"';
+   h+='<td'+attr+' style="'+st+'">'+esc(val)+'</td>';
+   line.push(val);
+  });
+  h+='</tr>';
+  tsv.push(line.join('\t'));
+ });
+ return{html:h+'</table>',tsv:tsv.join('\n')};
+}
 function prng(str){var h=1779033703^str.length;for(var i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19}var a=h>>>0;return function(){a=(a+0x6D2B79F5)|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function rnd(X,h){var sh=X.sh||{},tol=parseFloat((X.rb||{}).tol);if(isNaN(tol))tol=0.1;
  var R=prng(CUR+'|'+curISO()+'|'+h+'|'+(X.seed||0));
@@ -281,7 +459,7 @@ function rnd(X,h){var sh=X.sh||{},tol=parseFloat((X.rb||{}).tol);if(isNaN(tol))t
 function sumW(a){var t=0;a.forEach(function(c){t+=c.w});return t}
 var SHC={A:'#92CDDC',B:'#FAC090',C:'#E6B9B8'};
 var RED_EX=['E','F','J','K','L','M','N','O','P','Q','R','S'],PL_EX=['E','L','N','O','P','Q','R'];
-function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace/>/g,'&gt;')}
 function loadX(){try{return JSON.parse(sget(XK))||{}}catch(e){return {}}}
 function xs(){return loadX()[CUR]||{}}
 function putX(fn){try{var X=loadX(),o=X[CUR]||{};fn(o);X[CUR]=o;sset(XK,JSON.stringify(X))}catch(e){}}
@@ -291,7 +469,7 @@ function isoFromDMY(s){var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||''
 var XDATE='';
 function curISO(){return XDATE||todayISO()}
 function curDMY(){return dmY(curISO())}
-function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
+function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child,#tS table.swdata tr>td:nth-child(2)');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
 var _day=todayISO();setInterval(function(){var d=todayISO();if(d!==_day){_day=d;refreshDates()}},30000);
 function dtxt(iso,fmt){var p=(iso||curISO()).split('-');return fmt==='mdy'?p[1]+'/'+p[2]+'/'+p[0]:p[2]+'/'+p[1]+'/'+p[0]}
 function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,a:a,c:c})});return out}
@@ -302,17 +480,18 @@ function vals(kind,d,X){
  var v={B:dtxt(curISO(),X.fmt),C:d.h+':00'},red={},ed={},auto={};
  if(kind==='r'){
   v.D='Reactor';v.G=d.a[0];v.H=d.a[1];v.I=d.a[2];
+  if(num(v.I)!==null&&num(v.I)>0.08)red.I=1;
   RED_EX.forEach(function(k){v[k]=g(k,(k==='R'||k==='S')?'':'N/A');ed[k]=1});
   if(v.K===''||v.K==='N/A'){var cr=tfmCore(v.G,v.H,v.I,v.P,v.Q,v.O);if(!cr.miss.length){v.K=cr.val.toFixed(2);auto.K=1}}
  }else{
   v.D='Plodder';v.F=d.a[3];v.G=(d.a[4]==='N/A'?'':d.a[4]);v.H=d.a[5];
+  if(num(v.H)!==null&&num(v.H)>0.08)red.H=1;
   v.I=d.own?d.a[8]:'';v.J=d.own?d.a[9]:'';v.K=d.own?d.a[10]:'';v.M=d.own?d.a[11]:'';
   v.E=g('E','No rancid odor');v.L=g('L','N/A');v.Q=g('Q','Present');v.R=g('R','');
   var rv=d.own?rnd(X,d.h):null;
   function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||(k==='P'&&e===COLDEF))){auto[k]=1;return val}return e!==undefined?e:''}
   v.N=ga('N',rv&&rv.iv);v.O=ga('O',rv&&rv.ti);v.P=ga('P',rv&&rv.col);
   PL_EX.forEach(function(k){ed[k]=1});
-  /* the cells with no data read N/A - the same convention as the Reactor table */
   ['F','G','H','I','J','K','L','M','N','O','P'].forEach(function(k){
    if(v[k]===''&&ex[k]===undefined)v[k]='N/A';
   });
@@ -333,7 +512,7 @@ function tableHTML(kind,data,X){
   var r=vals(kind,d,X),first=i===0,last=i===data.length-1,line=[];
   h+='<tr style="height:'+ht+'pt">';
   cols.forEach(function(c,ci){
-   var v=r.v[c.k];if(v==null)v='';
+   var v=r.v[c.k];if(val==null)v='';
    h+=tcell(v,{w:c.w,fs:(kind==='p'&&c.k==='B')?10:fs,ht:ht,bg:(kind==='r'&&c.k==='C')?SHC[CUR]:'',red:r.red[c.k],bt:first?2:1,bb:last?2:1,bl:ci===0?2:1,br:ci===cols.length-1?2:1,ed:r.ed[c.k],auto:r.auto&&r.auto[c.k],t:kind,h:d.h,k:c.k});
    line.push(v);
   });
@@ -356,9 +535,6 @@ function autoTfmCards(){
  [].forEach.call(document.querySelectorAll('.card'),function(c){
   if(c._h==null||c._tm)return;
   var cells=c.querySelectorAll('.blk td[contenteditable]');
-  /* the TFM is calculated in every card that carries a Plodder table - also in
-     the 'Add last Plodder table' cards, where the Cl/Gly/EDTA were copied in.
-     The old condition (sample card + hour identical) left those cells empty. */
   if(!(c.querySelector('.ck').checked&&cells.length>=12))return;
   var a=[].map.call(cells,cellTxt),r=tfmCore(a[3],a[4],a[5],a[8],a[9],a[10]),T=cells[11];
   if(T===document.activeElement)return;
@@ -377,23 +553,42 @@ function autoK(){
 }
 function renderSummary(){
  var el=document.getElementById('sum');if(!el)return;
- var X=xs(),data=hourData(),r=tableHTML('r',data,X),p=tableHTML('p',data,X);
+ var X=xs(),data=hourData(),r=tableHTML('r',data,X),p=tableHTML('p',data,X),s=swingTableHTML(data,X);
  document.getElementById('tR').innerHTML=r.html;document.getElementById('tP').innerHTML=p.html;
- el._tsv={r:r.tsv,p:p.tsv};
+ var tsEl=document.getElementById('tS');if(tsEl)tsEl.innerHTML=s.html;
+ var br=swBounds(CUR);
+ var swLbl=document.getElementById('swRangeLbl');if(swLbl)swLbl.textContent='Swing Noodles 72% sheet (B'+br.st+'\u2013B'+br.en+' \u2022 '+br.tons+' tons)';
+ var sw1Lbl=document.getElementById('sw1Lbl');if(sw1Lbl)sw1Lbl.textContent='B'+br.st;
+ var fEl=document.getElementById('swFrom'),tEl=document.getElementById('swTo'),tnEl=document.getElementById('swTons');
+ if(fEl&&document.activeElement!==fEl)fEl.value=br.st;
+ if(tEl&&document.activeElement!==tEl)tEl.value=br.en;
+ if(tnEl&&document.activeElement!==tnEl)tnEl.value=br.tons;
+ el._tsv={r:r.tsv,p:p.tsv,s:s.tsv};
  var tl=[];data.forEach(function(d){var cc=d.c.querySelector('.calc'),r=d.own?tfmCore(d.a[3],d.a[4],d.a[5],d.a[8],d.a[9],d.a[10]):null;
   if(cc)cc.innerHTML=!d.own?'':(r.miss.length?'TFM calculated: waiting for '+r.miss.join(', '):'TFM calculated: <b style="font-size:16px">'+r.val.toFixed(2)+'</b> &nbsp;= (100 \u2212 ('+r.terms.join(' + ')+')) \u00f7 1.086 &nbsp;= '+(100-r.sum).toFixed(2)+' \u00f7 1.086');
   if(r&&!r.miss.length)tl.push(d.h+':00 \u2192 '+r.val.toFixed(2))});
  var tc=document.getElementById('tc');if(tc)tc.textContent=tl.length?'TFM calculated \u2013 '+tl.join('  |  '):'';
  applyZoom();
 }
+function autoSwFA(){
+ [].forEach.call(document.querySelectorAll('#tS table.swdata tr'),function(tr){
+  var E=tr.querySelector('td[data-k="E"]'),J=tr.querySelector('td[data-k="J"]');
+  if(!E||!J)return;
+  var fv=num(E.textContent),hi=(fv!==null&&fv>0.08);
+  E.style.color=hi?'#FF0000':'#000000';
+  if(J!==document.activeElement&&J.getAttribute('data-auto')==='1'){
+   J.textContent=hi?'HOLD High FA':'Good ';
+  }
+ });
+}
 function saveExtras(){
- autoK();
- putX(function(o){o.ex=o.ex||{};[].forEach.call(document.querySelectorAll('#sum td.ex'),function(x){var h=x.getAttribute('data-h'),t=x.getAttribute('data-t'),k=x.getAttribute('data-k');o.ex[h]=o.ex[h]||{};o.ex[h][t]=o.ex[h][t]||{};if(x.getAttribute('data-auto')==='1'){delete o.ex[h][t][k]}else{o.ex[h][t][k]=x.textContent.trim()}})});
+ autoK();autoSwFA();
+ putX(function(o){o.ex=o.ex||{};o.sw=o.sw||{};[].forEach.call(document.querySelectorAll('#sum td.ex'),function(x){var h=x.getAttribute('data-h'),t=x.getAttribute('data-t'),k=x.getAttribute('data-k');if(t==='s'){o.sw[h]=o.sw[h]||{};if(x.getAttribute('data-auto')==='1'){delete o.sw[h][k]}else{o.sw[h][k]=x.textContent.replace(/\u00a0/g,'')}}else{o.ex[h]=o.ex[h]||{};o.ex[h][t]=o.ex[h][t]||{};if(x.getAttribute('data-auto')==='1'){delete o.ex[h][t][k]}else{o.ex[h][t][k]=x.textContent.trim()}}})});
  setStatus();
 }
 function applyZoom(){
  var z=xs().zoom||'fit';
- [['R',sumW(RCOLS)],['P',sumW(PCOLS)]].forEach(function(a){var w=document.getElementById('zw'+a[0]);if(!w)return;var f=Math.min(1,0.8*(w.parentNode.clientWidth-20)/a[1]);if(!(f>0))f=0.3;w.style.zoom=(z==='fit'?f:+z)});
+ [['R',sumW(RCOLS)],['P',sumW(PCOLS)],['S',sumW(SCOLS)]].forEach(function(a){var w=document.getElementById('zw'+a[0]);if(!w)return;var f=Math.min(1,0.8*(w.parentNode.clientWidth-20)/a[1]);if(!(f>0))f=0.3;w.style.zoom=(z==='fit'?f:+z)});
  [].forEach.call(document.querySelectorAll('.zb button'),function(b){b.classList.toggle('on',b.getAttribute('data-z')===z)});
 }
 window.addEventListener('resize',applyZoom);
@@ -401,12 +596,19 @@ function sbox(id,t){return '<div class="card"><div class="bar"><b>'+t+'</b><butt
 function buildSummary(m){
  var X=xs(),s=document.createElement('section');s.id='sum';
  s.innerHTML='<h2>Shift '+CUR+' \u2013 summary tables</h2><div class="ctl"><label>Date <input type="text" id="sd" placeholder="DD/MM/YYYY"></label><label>Format <select id="sf"><option value="dmy">DD-MM-YYYY</option><option value="mdy">MM-DD-YYYY</option></select></label><span class="zb"><button data-z="fit">Fit</button><button data-z="0.5">50%</button><button data-z="1">100%</button></span></div>'
-  +'<details class="rnd"><summary>Random range for IV / Titre</summary><div class="ctl"><label>\u00b1 <input type="number" step="0.05" id="rbtol"></label><button class="cp" id="rr">Re-randomize</button></div></details>'
-  +sbox('R','Reactor 72% sheet')+sbox('P','Plodder sheet')+'<div class="hint" id="tc" style="padding:0 0 8px"></div>'
-  +'<div class="hint" style="padding:0 0 14px">Rows are built from the hourly cards above. Tinted cells are the other analyses \u2013 tap to edit, they are saved too. IV and Titre are random (\u00b1 around the values you type in the Plodder sample cards); Color is copied as written. All three appear on both sampled hours. Copy gives data rows only, formatted like the sheet.</div>';
+  +'<details class="rnd"><summary>Random range for IV / Titre &amp; Swing Moisture (\u00b10.1)</summary><div class="ctl"><label>\u00b1 <input type="number" step="0.05" max="0.1" id="rbtol"></label><button class="cp" id="rr">Re-randomize</button></div></details>'
+  +sbox('R','Reactor 72% sheet')+sbox('P','Plodder sheet')
+  +'<div class="card"><div class="bar"><b id="swRangeLbl">Swing Noodles 72% sheet</b><div class="ctl" style="margin:0"><label>Tons <input type="number" id="swTons" min="5" max="300" step="5" style="width:62px"></label><label>From B<input type="number" id="swFrom" min="1" max="999" style="width:62px"></label><label>To B<input type="number" id="swTo" min="1" max="999" style="width:62px"></label><label><input type="checkbox" id="sw1"> 1st (<span id="sw1Lbl">B1</span>)</label></div><button class="cp" data-c="S">Copy</button></div><div class="sc2"><div class="zw" id="zwS"><div id="tS"></div></div></div></div>'
+  +'<div class="hint" id="tc" style="padding:0 0 8px"></div>'
+  +'<div class="hint" style="padding:0 0 14px">Rows are built from the hourly cards above. In Swing Noodles, change <b>Tons</b> (e.g. 40, 60, 75) or <b>From/To B</b> and the recorded Plodder hours automatically distribute across all 5-ton readings from start to finish (with random Moisture \u00b10.1, exact FA/FFA, and Color / T.Color). If FA &gt; 0.08 in Reactor, Plodder, or Swing summary tables, the FA number turns red (and Swing Note becomes <b>HOLD High FA</b>).</div>';
  m.appendChild(s);
- var sd=s.querySelector('#sd'),sf=s.querySelector('#sf');
+ var sd=s.querySelector('#sd'),sf=s.querySelector('#sf'),sw1=s.querySelector('#sw1'),swTons=s.querySelector('#swTons'),swFrom=s.querySelector('#swFrom'),swTo=s.querySelector('#swTo');
  sd.value=curDMY();sf.value=X.fmt||'dmy';
+ sw1.checked=(X.sw1!==undefined)?!!X.sw1:true;
+ sw1.onchange=function(){putX(function(o){o.sw1=sw1.checked});renderSummary()};
+ swTons.onchange=function(){var v=Math.max(1,parseInt(swTons.value,10)||60);putX(function(o){o.swTons=v;delete o.swTo});renderSummary()};
+ swFrom.onchange=function(){var v=Math.max(1,parseInt(swFrom.value,10)||1);putX(function(o){o.swFrom=v;if(o.swTo!==undefined&&o.swTo<v)delete o.swTo});renderSummary()};
+ swTo.onchange=function(){var br=swBounds(CUR),v=Math.max(br.st,parseInt(swTo.value,10)||br.en);putX(function(o){o.swTo=v;o.swTons=v-br.st+1});renderSummary()};
  sd.onchange=function(){XDATE=isoFromDMY(sd.value);sd.dataset.touched='1';renderSummary()};
  sf.onchange=function(){putX(function(o){o.fmt=sf.value});renderSummary()};
  var tolEl=s.querySelector('#rbtol'),tv=(X.rb||{}).tol;tolEl.value=(tv===undefined||tv==='')?0.1:tv;tolEl.onchange=function(){putX(function(o){o.rb=o.rb||{};o.rb.tol=tolEl.value});renderSummary()};
@@ -416,7 +618,7 @@ function buildSummary(m){
  renderSummary();
 }
 function copySum(id,btn){
- var t=document.querySelector('#t'+id+' table');if(!t)return;
+ var t=document.querySelector(id==='S'?'#tS table.swdata':'#t'+id+' table');if(!t)return;
  var c=t.cloneNode(true);
  [].forEach.call(c.querySelectorAll('td'),function(x){['contenteditable','class','data-t','data-h','data-k','data-auto'].forEach(function(a){x.removeAttribute(a)})});
  copyOut(c.outerHTML,document.getElementById('sum')._tsv[id.toLowerCase()],btn);
@@ -440,11 +642,11 @@ function colL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65
 function xesc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function toXlsx(sheets){
  var fonts=['<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'],fk={},fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],lk={},borders=['<border><left/><right/><top/><bottom/><diagonal/></border>'],bk={},xfs=['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'],xk={};
- function font(sz,color){var k=sz+'|'+color;if(fk[k]===undefined){fk[k]=fonts.length;fonts.push('<font><b/><sz val="'+sz+'"/><color rgb="FF'+color+'"/><name val="Times New Roman"/><family val="1"/></font>')}return fk[k]}
- function fill(c){if(!c)return 0;if(lk[c]===undefined){lk[c]=fills.length;fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FF'+c+'"/><bgColor indexed="64"/></patternFill></fill>')}return lk[c]}
+ function font(sz,color,fn){var nm=fn||'Times New Roman',fam=nm==='Arial'?2:1,k=sz+'|'+color+'|'+nm;if(fk[k]===undefined){fk[k]=fonts.length;fonts.push('<font><b/><sz val="'+sz+'"/><color rgb="FF'+color+'"/><name val="'+nm+'"/><family val="'+fam+'"/></font>')}return fk[k]}
+ function fill(c){if(!c)return 0;if(lk[c]===undefined){lk[c]=fills.length;fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FF'+c+'"/><bgColor indexed="64"/></patternFill>')}return lk[c]}
  function sd(n,v){return '<'+n+' style="'+v+'"><color rgb="FF000000"/></'+n+'>'}
  function bord(t,b,l,r){var k=[t,b,l,r].join();if(bk[k]===undefined){bk[k]=borders.length;borders.push('<border>'+sd('left',l)+sd('right',r)+sd('top',t)+sd('bottom',b)+'<diagonal/></border>')}return bk[k]}
- function xf(c){var k=[c.fs,c.color,c.fill,c.bt,c.bb,c.bl,c.br,c.fmt].join('|');if(xk[k]===undefined){xk[k]=xfs.length;xfs.push('<xf numFmtId="'+(c.fmt||0)+'" fontId="'+font(c.fs,c.color)+'" fillId="'+fill(c.fill)+'" borderId="'+bord(c.bt,c.bb,c.bl,c.br)+'" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>')}return xk[k]}
+ function xf(c){var k=[c.fs,c.color,c.fill,c.bt,c.bb,c.bl,c.br,c.fmt,c.fn||''].join('|');if(xk[k]===undefined){xk[k]=xfs.length;xfs.push('<xf numFmtId="'+(c.fmt||0)+'" fontId="'+font(c.fs,c.color,c.fn)+'" fillId="'+fill(c.fill)+'" borderId="'+bord(c.bt,c.bb,c.bl,c.br)+'" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>')}return xk[k]}
  var NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',RN='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
  var sheetXml=sheets.map(function(sh){
   var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="3" customWidth="1"/>';
@@ -469,29 +671,40 @@ function toXlsx(sheets){
 function rgbHex(v){if(!v)return null;var m=/rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(v);if(m){return [m[1],m[2],m[3]].map(function(n){return ('0'+(+n).toString(16)).slice(-2)}).join('').toUpperCase()}m=/#([0-9a-fA-F]{6})/.exec(v);return m?m[1].toUpperCase():null}
 function bwid(v){return parseFloat(v)>=2?'medium':'thin'}
 function extractSheet(kind,name){
- var tb=document.querySelector('#t'+kind+' table');if(!tb)return null;
+ var tb=document.querySelector(kind==='S'?'#tS table.swdata':'#t'+kind+' table');if(!tb)return null;
  var X=xs(),iso=curISO(),p=iso.split('-'),serial=Math.round(Date.UTC(+p[0],+p[1]-1,+p[2])/86400000)+25569,dfmt=X.fmt==='mdy'?165:164;
- var cols=kind==='R'?RCOLS:PCOLS,widths=cols.map(function(c){return Math.round((c.w-5)/7*10)/10});
+ var cols=kind==='R'?RCOLS:(kind==='P'?PCOLS:SCOLS),widths=cols.map(function(c){return Math.round((c.w-5)/7*10)/10});
  var rows=[];
  [].forEach.call(tb.querySelectorAll('tr'),function(tr){
   var ht=parseFloat(tr.style.height)||15,cells=[];
   [].forEach.call(tr.children,function(td,i){
-   var st=td.style,t=td.textContent.replace(/\u00a0/g,'').trim(),fs=st.fontSize,sz=/pt/.test(fs)?parseFloat(fs):parseFloat(fs)*0.75;
+   var st=td.style,t=td.textContent.replace(/\u00a0/g,''),tTrim=t.trim(),fs=st.fontSize,sz=/pt/.test(fs)?parseFloat(fs):parseFloat(fs)*0.75;
    var fillc=rgbHex(st.backgroundColor);if(fillc==='FFFFFF')fillc=null;
-   var c={fs:sz||11,color:rgbHex(st.color)||'000000',fill:fillc,bt:bwid(st.borderTopWidth),bb:bwid(st.borderBottomWidth),bl:bwid(st.borderLeftWidth),br:bwid(st.borderRightWidth),v:t,fmt:0};
-   if(i===0){c.v=serial;c.fmt=dfmt}
-   else if(i===1){var m=/^(\d+):(\d+)$/.exec(t);c.v=m?(+m[1]*60+ +m[2])/1440:t;c.fmt=m?166:0}
-   else if(/^-?\d+(\.\d+)?$/.test(t))c.v=parseFloat(t);
+   var c={fs:sz||11,fn:kind==='S'?'Arial':'Times New Roman',color:rgbHex(st.color)||'000000',fill:fillc,bt:bwid(st.borderTopWidth),bb:bwid(st.borderBottomWidth),bl:bwid(st.borderLeftWidth),br:bwid(st.borderRightWidth),v:kind==='S'&&(i===7||i===8)?t:tTrim,fmt:0};
+   if(kind==='S'){
+    if(i===1&&/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(tTrim)){c.v=serial;c.fmt=dfmt}
+    else if(i>=2&&i<=6&&/^-?\d+(\.\d+)?$/.test(tTrim))c.v=parseFloat(tTrim);
+   }else{
+    if(i===0){c.v=serial;c.fmt=dfmt}
+    else if(i===1){var m=/^(\d+):(\d+)$/.exec(tTrim);c.v=m?(+m[1]*60+ +m[2])/1440:tTrim;c.fmt=m?166:0}
+    else if(/^-?\d+(\.\d+)?$/.test(tTrim))c.v=parseFloat(tTrim);
+   }
    cells.push(c)});
   rows.push({ht:ht,cells:cells})});
  return {name:name,widths:widths,rows:rows};
 }
-function expBar(){var d=document.createElement('div');d.className='exp';
- d.innerHTML='<span>Export to Excel \u2013 shift '+CUR+'</span><button data-x="R">Reactor</button><button data-x="P">Plodder</button><button data-x="B">Both</button>';
+function expBar(){var d=document.className='exp';
+ d.innerHTML='<span>Export to Excel \u2013 shift '+CUR+'</span><button data-x="R">Reactor</button><button data-x="P">Plodder</button><button data-x="S">Swing Noodles</button><button data-x="B">All</button>';
  [].forEach.call(d.querySelectorAll('button'),function(b){b.onclick=function(){exportXlsx(b.getAttribute('data-x'))}});
  return d}
 async function exportXlsx(kind){
  var dl=null;try{dl=await window.claude.use('downloads')}catch(e){}
+ if(!dl)dl={save:function(o){return new Promise(function(res){var b=o.data instanceof Blob?o.data:new Blob([o.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(u);a.remove()},2000);res({status:'saved'})})}};
+ var sh=[];if(kind==='R'||kind==='B')sh.push(extractSheet('R','Reactor'));if(kind==='P'||kind==='B')sh.push(extractSheet('P','Plodder'));if(kind==='S'||kind==='B')sh.push(extractSheet('S','Swing Noodles'));
+ sh=sh.filter(Boolean);if(!sh.length){toast('Nothing to export');return}
+ var X=xs(),nm='Shift_'+CUR+'_'+(kind==='R'?'Reactor_':kind==='P'?'Plodder_':kind==='S'?'Swing_Noodles_':'')+curDMY().replace(/\//g,'-')+'.xlsx';
+ try{await dl.save({filename:nm,data:toXlsx(sh)});toast('Saved')}catch(e){if(!e||e.code!=='declined')toast('Could not save the file')}
+}
  if(!dl)dl={save:function(o){return new Promise(function(res){var b=o.data instanceof Blob?o.data:new Blob([o.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(u);a.remove()},2000);res({status:'saved'})})}};
  var sh=[];if(kind==='R'||kind==='B')sh.push(extractSheet('R','Reactor'));if(kind==='P'||kind==='B')sh.push(extractSheet('P','Plodder'));
  sh=sh.filter(Boolean);if(!sh.length){toast('Nothing to export');return}
