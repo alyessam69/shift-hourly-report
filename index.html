@@ -347,10 +347,13 @@ function swingRows(data,X){
  var swEx=X.sw||{};
  var lastY5R='';
  data.forEach(function(d){if(d&&d.a&&d.a[6]&&d.a[6].trim()!=='')lastY5R=d.a[6].trim()});
+ /* the readings are taken every 5 tons: the first bag of the range, then
+    every multiple of 5 (B1, B5, B10 ... for shift A - B57, B60, B65 ... when
+    the range starts at B57) - the numbers are absolute, not counted from the
+    start of the range */
  var sampBags=[];
  for(var n=st;n<=en;n++){
-  var off=n-st+1;
-  if((off===1&&inc1)||(off%5===0))sampBags.push(n);
+  if((n===st&&inc1)||(n%5===0))sampBags.push(n);
  }
  var active=data.filter(hasPlodderRow);
  var H=active.length,S=sampBags.length;
