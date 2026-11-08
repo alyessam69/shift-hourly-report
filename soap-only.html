@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFFCO Egypt · Soap Calculator</title>
+    <style>
+        /* ===== BASE ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        :root {
+            --primary: #0052CC;
+            --primary-dark: #003399;
+            --secondary: #004499;
+            --accent: #FF6B35;
+            --success: #10B981;
+            --light-bg: #F8FAFC;
+            --border: #E2E8F0;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --bg: #f6f9fc;
+            --panel: #ffffff;
+            --ink: #1f2a44;
+            --muted: #5c6786;
+            --accent-soft: #e6f2fb;
+            --accent-dark: #0f5a8a;
+            --warn: #d97706;
+            --warn-soft: #fff4e5;
+            --ok: #2e7d32;
+            --ok-soft: #e8f5e9;
+            --line: #d8e0eb;
+            --shadow: 0 4px 14px rgba(20, 40, 80, 0.06);
+            --code-bg: #0f172a;
+            --code-ink: #e2e8f0;
+        }
+        html {
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            line-height: 1.55;
+            min-height: 100vh;
+        }
+
+        /* ===== HEADER ===== */
+        header.banner {
+            background: linear-gradient(135deg, #0f5a8a 0%, #1e7fbf 60%, #3aa5e0 100%);
+            color: #fff;
+            padding: 28px 24px 22px;
+            text-align: center;
+        }
+        header.banner h1 {
+            margin: 0 0 4px;
+            font-size: 26px;
+            letter-spacing: 0.3px;
+        }
+        header.banner p {
+            margin: 0;
+            opacity: 0.92;
+            font-size: 15px;
+        }
+        header.banner .small {
+            margin-top: 6px;
+            font-size: 12px;
+            opacity: 0.8;
+            letter-spacing: 0.5px;
+        }
+
+        /* ===== TAB NAV ===== */
+        .tab-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+            background: #fff;
+            border-bottom: 2px solid var(--border);
+            padding: 0 12px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+        .tab-nav button {
+            padding: 14px 22px;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        .tab-nav button:hover {
+            color: var(--accent-dark);
+            background: var(--accent-soft);
+        }
+        .tab-nav button.active {
+            color: var(--accent-dark);
+            border-bottom-color: var(--accent);
+        }
+
+        /* ===== TAB CONTENT ===== */
+        .tab-content {
+            display: none;
+            padding: 20px 24px 40px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        /* ===== SOAP CARDS ===== */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header-soap {
+            text-align: center;
+            color: var(--primary-dark);
+            margin-bottom: 20px;
+        }
+        .header-soap h2 {
+            font-size: 1.6rem;
+            font-weight: 700;
+        }
+        .header-soap p {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+        .calculator-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        @media (min-width: 768px) {
+            .calculator-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        @media (min-width: 1024px) {
+            .calculator-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        .calculator-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            animation: slideUp 0.6s ease-out backwards;
+            scroll-margin-top: 24px;
+        }
+        .calculator-card:nth-child(1) {
+            animation-delay: 0.05s;
+        }
+        .calculator-card:nth-child(2) {
+            animation-delay: 0.10s;
+        }
+        .calculator-card:nth-child(3) {
+            animation-delay: 0.15s;
+        }
+        .calculator-card:nth-child(4) {
+            animation-delay: 0.20s;
+        }
+        .calculator-card:nth-child(5) {
+            animation-delay: 0.25s;
+        }
+        .calculator-card:nth-child(6) {
+            animation-delay: 0.30s;
+        }
+        .calculator-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+        }
+        .card-icon {
+            width: 35px;
+            height: 35px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .card-header h3 {
+            font-size: 1rem;
+            color: var(--primary);
+        }
+        .card-header.fa .card-icon {
+            background: #FEE2E2;
+            color: #DC2626;
+        }
+        .card-header.ffa .card-icon {
+            background: #FEF3C7;
+            color: #F59E0B;
+        }
+        .card-header.chloride-lye .card-icon {
+            background: #DBEAFE;
+            color: #0284C7;
+        }
+        .card-header.chloride-soap .card-icon {
+            background: #E0E7FF;
+            color: #4F46E5;
+        }
+        .card-header.glycerine .card-icon {
+            background: #D1FAE5;
+            color: #059669;
+        }
+        .card-header.edta .card-icon {
+            background: #F3E8FF;
+            color: #7C3AED;
+        }
+
+        .formula-display {
+            background: var(--light-bg);
+            border-left: 3px solid var(--primary);
+            padding: 10px;
+            margin-bottom: 14px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: var(--text-dark);
+            line-height: 1.4;
+            overflow-x: auto;
+        }
+        .test-info {
+            background: #FFF8E1;
+            border-left: 3px solid #F59E0B;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            color: var(--text-dark);
+            line-height: 1.5;
+        }
+        .test-info strong { color: #92400E; }
+        .input-group {
+            margin-bottom: 12px;
+        }
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-dark);
+            font-size: 0.85rem;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            background: #fff;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.1);
+        }
+        .result-box {
+            background: linear-gradient(135deg, #F0F9FF 0%, #F5F3FF 100%);
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 14px;
+            text-align: center;
+        }
+        .result-label {
+            font-size: 0.75rem;
+            color: var(--text-light);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        .result-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            font-family: 'Courier New', monospace;
+        }
+        .result-unit {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-top: 2px;
+        }
+        .reset-btn {
+            width: 100%;
+            padding: 10px;
+            margin-top: 12px;
+            background: var(--light-bg);
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-weight: 600;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        .reset-btn:active {
+            background: var(--border);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* ===== SETTINGS CARD ===== */
+        .settings-card {
+            background: white;
+            border-radius: 12px;
+            padding: 22px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            margin-bottom: 25px;
+        }
+        .settings-card h2 {
+            font-size: 1.1rem;
+            color: var(--primary);
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .settings-card>p {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        @media (min-width: 768px) {
+            .settings-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        .settings-grid .input-group input {
+            border-color: var(--border);
+        }
+        .settings-btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 4px;
+        }
+        .settings-btn-row button {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .save-btn {
+            background: var(--primary);
+            color: white;
+        }
+        .save-btn:hover {
+            background: var(--primary-dark);
+        }
+        .clear-btn {
+            background: var(--light-bg);
+            border: 1.5px solid var(--border) !important;
+            color: var(--text-dark);
+        }
+        .clear-btn:hover {
+            border-color: var(--accent) !important;
+            color: var(--accent);
+        }
+        .settings-status {
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+
+        /* ===== OIL & STD LAYOUT (with TOC) ===== */
+        .layout-with-toc {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            gap: 0;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .layout-with-toc nav.toc {
+            background: #fff;
+            border-right: 1px solid var(--line);
+            padding: 18px 0;
+            position: sticky;
+            top: 0;
+            align-self: start;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .layout-with-toc nav.toc h3 {
+            margin: 0 18px 10px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--muted);
+        }
+        .layout-with-toc nav.toc a {
+            display: block;
+            padding: 8px 18px;
+            color: var(--ink);
+            text-decoration: none;
+            font-size: 14px;
+            border-left: 3px solid transparent;
+            transition: all 0.15s ease;
+        }
+        .layout-with-toc nav.toc a:hover {
+            background: var(--accent-soft);
+            border-left-color: var(--accent);
+            color: var(--accent-dark);
+        }
+        .layout-with-toc nav.toc a.active {
+            background: var(--accent-soft);
+            border-left-color: var(--accent);
+            color: var(--accent-dark);
+            font-weight: 600;
+        }
+        .layout-with-toc nav.toc .group {
+            margin: 14px 0 4px;
+            padding: 0 18px;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.8px;
+        }
+
+        .layout-with-toc main {
+            padding: 28px 36px 60px;
+            overflow: hidden;
+        }
+
+        /* ===== OIL & STD STYLES ===== */
+        .sop {
+            background: var(--panel);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 28px;
+            overflow: hidden;
+            scroll-margin-top: 24px;
+        }
+        .sop header.sop-head {
+            background: var(--accent-soft);
+            padding: 14px 22px;
+            border-bottom: 1px solid var(--line);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sop header.sop-head h2 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--accent-dark);
+        }
+        .sop header.sop-head .meta {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        .sop header.sop-head .toggle {
+            font-size: 20px;
+            color: var(--accent);
+            transition: transform 0.2s;
+        }
+        .sop.collapsed header.sop-head .toggle {
+            transform: rotate(-90deg);
+        }
+        .sop .body {
+            padding: 20px 24px;
+        }
+        .sop.collapsed .body {
+            display: none;
+        }
+
+        .sop h3 {
+            color: var(--accent-dark);
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 5px;
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        .sop h3:first-child {
+            margin-top: 0;
+        }
+        .sop ul,
+        .sop ol {
+            padding-left: 22px;
+        }
+        .sop li {
+            margin: 4px 0;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+        .pill {
+            background: var(--accent-soft);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+        .pill strong {
+            color: var(--accent-dark);
+        }
+        .pill ul {
+            margin: 6px 0 0;
+            padding-left: 18px;
+        }
+
+        .formula {
+            background: var(--code-bg);
+            color: var(--code-ink);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif;
+            font-size: 16px;
+            margin: 10px 0;
+            letter-spacing: 0.2px;
+            overflow-x: auto;
+        }
+        .formula .num {
+            color: #ffb86c;
+        }
+        .formula .var {
+            color: #82d4ff;
+        }
+
+        .calc {
+            background: linear-gradient(135deg, #f0f7ff 0%, #e6f2fb 100%);
+            border: 1px solid #b9dcef;
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin: 14px 0 4px;
+        }
+        .calc h4 {
+            margin: 0 0 12px;
+            font-size: 15px;
+            color: var(--accent-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .calc h4::before {
+            content: "🧮";
+        }
+        .calc .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .calc label {
+            font-size: 13px;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 3px;
+        }
+        .calc input,
+        .calc select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            background: #fff;
+        }
+        .calc input:focus,
+        .calc select:focus {
+            outline: 2px solid var(--accent);
+            border-color: var(--accent);
+        }
+        .calc-btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 6px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .calc-btn:hover {
+            background: var(--accent-dark);
+        }
+        .calc .result {
+            margin-top: 14px;
+            padding: 12px 16px;
+            background: #fff;
+            border-left: 4px solid var(--ok);
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--ink);
+            display: none;
+        }
+        .calc .result.show {
+            display: block;
+        }
+        .calc .result.fail {
+            border-left-color: #b00020;
+        }
+        .calc .result .val {
+            color: var(--accent-dark);
+            font-size: 19px;
+        }
+        .calc .result .verdict-pass {
+            color: var(--ok);
+            font-weight: 700;
+        }
+        .calc .result .verdict-fail {
+            color: #b00020;
+            font-weight: 700;
+        }
+        .calc .result .verdict-na {
+            color: var(--muted);
+            font-weight: 500;
+        }
+        .calc .result .sub-line {
+            font-size: 12.5px;
+            font-weight: 400;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+        .calc .note {
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        .callout {
+            background: var(--warn-soft);
+            border-left: 4px solid var(--warn);
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin: 12px 0;
+            font-size: 14px;
+        }
+        .callout.ok {
+            background: var(--ok-soft);
+            border-left-color: var(--ok);
+        }
+        .callout strong {
+            color: var(--warn);
+        }
+        .callout.ok strong {
+            color: var(--ok);
+        }
+
+        .defs dt {
+            font-weight: 600;
+            color: var(--accent-dark);
+            margin-top: 8px;
+        }
+        .defs dd {
+            margin: 2px 0 8px 18px;
+            color: var(--ink);
+        }
+
+        /* ===== TABLES ===== */
+        .table-wrap {
+            overflow-x: auto;
+            margin: 10px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            background: #fff;
+            min-width: 600px;
+        }
+        th,
+        td {
+            border: 1px solid var(--line);
+            padding: 8px 10px;
+            text-align: left;
+        }
+        th {
+            background: var(--accent-soft);
+            color: var(--accent-dark);
+        }
+        table.center th,
+        table.center td {
+            text-align: center;
+        }
+        table.center th:first-child,
+        table.center td:first-child {
+            text-align: left;
+            font-weight: 600;
+        }
+        table caption {
+            text-align: left;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--muted);
+            padding-bottom: 6px;
+        }
+
+        /* ===== PM CHECK — SPOT-VALUE ROWS (fit mobile, each row a separate block) ===== */
+        .pm-spots-row-table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: collapse;
+            min-width: 0;
+            font-size: 12.5px;
+            background: #fff;
+            margin-bottom: 8px;
+        }
+        .pm-spots-row-table:last-child { margin-bottom: 0; }
+        .pm-spots-row-table td {
+            border: 1px solid var(--line);
+            padding: 8px 2px;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        /* ===== INTRO ===== */
+        .intro {
+            background: var(--panel);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+            border-left: 4px solid var(--accent);
+        }
+        .intro h2 {
+            margin-top: 0;
+        }
+        .intro p {
+            color: var(--muted);
+            margin: 6px 0;
+        }
+
+        /* ===== FOOTER ===== */
+        .footer {
+            text-align: center;
+            color: var(--muted);
+            margin-top: 30px;
+            font-size: 0.8rem;
+            padding: 20px 0;
+            border-top: 1px solid var(--line);
+        }
+        .footer .signature {
+            margin-top: 6px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--accent-dark);
+            letter-spacing: 0.3px;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 900px) {
+            .layout-with-toc {
+                grid-template-columns: 1fr;
+            }
+            .layout-with-toc nav.toc {
+                position: relative;
+                height: auto;
+                max-height: 50vh;
+            }
+            .layout-with-toc main {
+                padding: 20px;
+            }
+            .grid-2,
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            .tab-content {
+                padding: 16px;
+            }
+            .tab-nav button {
+                padding: 10px 14px;
+                font-size: 13px;
+            }
+            .calc .row {
+                grid-template-columns: 1fr;
+            }
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+            .calculator-grid {
+                grid-template-columns: 1fr;
+            }
+            table {
+                min-width: 480px;
+            }
+        }
+        @media (max-width: 600px) {
+            header.banner h1 {
+                font-size: 20px;
+            }
+            .tab-nav {
+                flex-wrap: wrap;
+            }
+            .tab-nav button {
+                flex: 1 0 auto;
+                text-align: center;
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            table {
+                min-width: 360px;
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tab-section {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .tab-section .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .result.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="banner">
+        <h1>🧼 IFFCO Egypt · Soap Calculator</h1>
+        <p>Soap QC · FA · FFA · Brine · Chloride · Glycerine · EDTA</p>
+        <div class="small">IFFCO Beauty SOPs · Powered by Chemist Ali Essam</div>
+    </header>
+
+    <div class="tab-content active" id="tab-soap">
+        <div class="tab-section">
+            <div class="layout-with-toc">
+                <nav class="toc" id="soapToc">
+                    <h3>Contents</h3>
+                    <div class="group">Titration Tests</div>
+                    <a href="#card-fa" class="active">1. Free Alkali (FA)</a>
+                    <a href="#card-ffa">2. Free Fatty Acid (FFA)</a>
+                    <a href="#card-brine">3. Brine Sample</a>
+                    <a href="#card-clsoap">4. Chloride in Soap</a>
+                    <a href="#card-gly">5. Glycerine</a>
+                    <a href="#card-edta">6. EDTA</a>
+                    <div class="group">Reference Data</div>
+                    <a href="#soap-final">Full Comparison Table</a>
+                </nav>
+
+                <main>
+            <!-- Soap Normality Settings -->
+            <div class="settings-card">
+                <h2>⚙️ Standardized Normality Settings (Soap)</h2>
+                <p>Titrant normality is usually re-standardized every 2–3 months. Enter each current standardized value once here and it auto-fills into the matching calculator below.</p>
+                <div class="settings-grid">
+                    <div class="input-group">
+                        <label for="soap-set-fa">N for Free Alkali (FA)</label>
+                        <input type="number" id="soap-set-fa" placeholder="e.g. 0.1002" step="0.0001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-set-ffa">N for FFA</label>
+                        <input type="number" id="soap-set-ffa" placeholder="e.g. 0.0987" step="0.0001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-set-cllye">N for Brine Sample</label>
+                        <input type="number" id="soap-set-cllye" placeholder="e.g. 0.1000" step="0.0001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-set-clsoap">N for Chloride in Soap</label>
+                        <input type="number" id="soap-set-clsoap" placeholder="e.g. 0.1000" step="0.0001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-set-gly">N for Glycerine</label>
+                        <input type="number" id="soap-set-gly" placeholder="e.g. 0.1000" step="0.0001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-set-edta">N for EDTA (Metal Content)</label>
+                        <input type="number" id="soap-set-edta" placeholder="e.g. 0.1000" step="0.0001">
+                    </div>
+                </div>
+                <div class="settings-btn-row">
+                    <button class="save-btn" id="soap-save-btn">Save Values</button>
+                    <button class="clear-btn" id="soap-clear-btn">Clear Saved Values</button>
+                </div>
+                <div class="settings-status" id="soap-norm-status">No saved values yet.</div>
+            </div>
+
+            <!-- Soap Calculator Grid -->
+            <div class="calculator-grid">
+
+                <!-- Free Alkali -->
+                <div class="calculator-card" id="card-fa">
+                    <div class="card-header fa">
+                        <div class="card-icon">🧪</div>
+                        <h3>Free Alkali (FA)</h3>
+                    </div>
+                    <div class="test-info"><strong>Principle:</strong> The soap is dissolved in hot neutralized 96% ethanol, and any free caustic alkali is titrated with standardized HCl in alcohol until the pink color disappears. (IBM 1136)
+                        <br><strong>Preparation steps:</strong>
+                        <ol style="margin:6px 0 0; padding-left:18px;">
+                            <li>Weigh 2 g of the sample into a 250 mL conical flask fitted with a reflux condenser.</li>
+                            <li>Add a few anti-bumping granules and ~100 mL of neutralized 96% ethanol.</li>
+                            <li>Heat in a boiling water bath, shaking frequently, until the soap fully dissolves.</li>
+                            <li>Titrate while still hot with standardized HCl until the pink color just disappears.</li>
+                        </ol>
+                    </div>
+                    <div class="formula-display">FA% = (N × V × 4) / WT</div>
+                    <div class="input-group">
+                        <label for="soap-fa-normality">Normality (N)</label>
+                        <input type="number" id="soap-fa-normality" placeholder="0.1" value="0.1" step="0.001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-fa-volume">Burette Reading (V) - mL</label>
+                        <input type="number" id="soap-fa-volume" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-fa-weight">Sample Weight (WT) - gm</label>
+                        <input type="number" id="soap-fa-weight" placeholder="0.0" step="0.01">
+                    </div>
+                    <div class="result-box">
+                        <div class="result-label">Free Alkali</div>
+                        <div class="result-value" id="soap-fa-result">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+                    <button class="reset-btn" id="soap-fa-reset">Reset</button>
+                </div>
+
+                <!-- FFA -->
+                <div class="calculator-card" id="card-ffa">
+                    <div class="card-header ffa">
+                        <div class="card-icon">🔬</div>
+                        <h3>Free Fatty Acid (FFA)</h3>
+                    </div>
+                    <div class="test-info"><strong>Principle:</strong> Same dissolution as the FA test, but here the free fatty acids are titrated with standardized NaOH using phenolphthalein — the opposite endpoint direction (titrate until pink <em>appears</em>, not disappears). (IBM 1137)
+                        <br><strong>Preparation steps:</strong>
+                        <ol style="margin:6px 0 0; padding-left:18px;">
+                            <li>Weigh 2 g of the sample into a 250 mL conical flask fitted with a reflux condenser.</li>
+                            <li>Add a few anti-bumping granules and ~100 mL of neutralized 96% ethanol.</li>
+                            <li>Heat in a boiling water bath, shaking frequently, until the soap fully dissolves.</li>
+                            <li>Titrate while still hot with standardized NaOH + phenolphthalein until pink just appears.</li>
+                        </ol>
+                    </div>
+                    <div class="formula-display">FFA% = (N × V × 25.6) / WT</div>
+                    <div class="input-group">
+                        <label for="soap-ffa-normality">Normality (N)</label>
+                        <input type="number" id="soap-ffa-normality" placeholder="0.1" value="0.1" step="0.001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-ffa-volume">Burette Reading (V) - mL</label>
+                        <input type="number" id="soap-ffa-volume" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-ffa-weight">Sample Weight (WT) - gm</label>
+                        <input type="number" id="soap-ffa-weight" placeholder="0.0" step="0.01">
+                    </div>
+                    <div class="result-box">
+                        <div class="result-label">FFA Concentration</div>
+                        <div class="result-value" id="soap-ffa-result">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+                    <button class="reset-btn" id="soap-ffa-reset">Reset</button>
+                </div>
+
+                <!-- Brine Sample (كانت Chloride in Lye) -->
+                <div class="calculator-card" id="card-brine">
+                    <div class="card-header chloride-lye">
+                        <div class="card-icon">⚗️</div>
+                        <h3>Brine Sample</h3>
+                    </div>
+                    <div class="test-info"><strong>Principle:</strong> Chloride in the brine/lye sample is titrated directly with standardized AgNO₃ using potassium chromate as indicator (Mohr method). Silver ions first precipitate the chloride as white silver chloride; once all chloride is consumed, the excess Ag⁺ reacts with the chromate to form a reddish-brown silver chromate, marking the endpoint.
+                        <br><strong>Preparation steps:</strong>
+                        <ol style="margin:6px 0 0; padding-left:18px;">
+                            <li>Weigh 0.1 g of the sample into a 250 mL beaker.</li>
+                            <li>Add 25 mL of distilled water.</li>
+                            <li>Add 2–3 mL of potassium chromate indicator.</li>
+                            <li>Titrate with standardized AgNO₃ until the color changes from yellow to a permanent brick-red/orange tint.</li>
+                        </ol>
+                    </div>
+                    <div class="formula-display">Cl⁻ (%) = (N × V × 5.85) / WT</div>
+                    <div class="input-group">
+                        <label for="soap-cl-lye-normality">Normality (N)</label>
+                        <input type="number" id="soap-cl-lye-normality" placeholder="0.1" value="0.1" step="0.001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-cl-lye-volume">Burette Reading (V) - mL</label>
+                        <input type="number" id="soap-cl-lye-volume" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-cl-lye-weight">Sample Weight (WT) - gm</label>
+                        <input type="number" id="soap-cl-lye-weight" placeholder="0.1" step="0.001">
+                    </div>
+                    <div class="result-box">
+                        <div class="result-label">Chloride</div>
+                        <div class="result-value" id="soap-cl-lye-result">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+                    <button class="reset-btn" id="soap-cl-lye-reset">Reset</button>
+                </div>
+
+                <!-- Chloride in Soap -->
+                <div class="calculator-card" id="card-clsoap">
+                    <div class="card-header chloride-soap">
+                        <div class="card-icon">🧼</div>
+                        <h3>Chloride in Soap</h3>
+                    </div>
+                    <div class="test-info"><strong>Principle:</strong> Fatty acids are precipitated as calcium salts, filtered off, and the chloride remaining in solution is titrated with standardized AgNO₃ using potassium chromate indicator (Mohr method). (IBM 1135, AOCS Da 9-48)
+                        <br><strong>Preparation steps:</strong>
+                        <ol style="margin:6px 0 0; padding-left:18px;">
+                            <li>Weigh 5 g of the sample and dissolve in hot water in a 250 mL beaker.</li>
+                            <li>Add 20 mL of 20% Calcium Nitrate solution and mix thoroughly.</li>
+                            <li>Cool, filter into a 250 mL volumetric flask, washing the filter free of chlorides, and make up to the mark.</li>
+                            <li>Take a 100 mL aliquot, neutralize to methyl orange with dilute nitric acid, then titrate with standardized AgNO₃ using potassium chromate indicator. Run a blank the same way.</li>
+                        </ol>
+                    </div>
+                    <div class="formula-display">Cl⁻ = (N × V × 14.6) / WT</div>
+                    <div class="input-group">
+                        <label for="soap-cl-soap-normality">Normality (N)</label>
+                        <input type="number" id="soap-cl-soap-normality" placeholder="0.1" value="0.1" step="0.001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-cl-soap-volume">Burette Reading (V) - mL</label>
+                        <input type="number" id="soap-cl-soap-volume" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-cl-soap-weight">Sample Weight (WT) - gm</label>
+                        <input type="number" id="soap-cl-soap-weight" placeholder="5.0" step="0.01">
+                    </div>
+                    <div class="result-box">
+                        <div class="result-label">Chloride</div>
+                        <div class="result-value" id="soap-cl-soap-result">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+                    <button class="reset-btn" id="soap-cl-soap-reset">Reset</button>
+                </div>
+
+                <!-- Glycerine -->
+                <div class="calculator-card" id="card-gly">
+                    <div class="card-header glycerine">
+                        <div class="card-icon">💧</div>
+                        <h3>Glycerine (Gly)</h3>
+                    </div>
+                    <div class="test-info"><strong>Principle:</strong> Sodium metaperiodate oxidizes glycerine's vicinal OH groups to formic acid. The sample and a blank are neutralized to pH 7, treated with periodate, then ethylene glycol destroys the periodate excess. Both are titrated to a pH endpoint with standardized NaOH — the difference in volume (sample − blank) is proportional to the glycerine present. (IBM 1147, AOCS Da 23-56)
+                        <br><strong>Preparation steps:</strong>
+                        <ol style="margin:6px 0 0; padding-left:18px;">
+                            <li>Weigh 5 g of the sample into 100 mL distilled water (Iodine flask); prepare a blank with 100 mL distilled water only.</li>
+                            <li>Add 25 mL of 20% Magnesium Nitrate to both, then filter.</li>
+                            <li>Add Bromothymol Blue indicator; neutralize both to pH 7.0 with 0.1N H₂SO₄/NaOH.</li>
+                            <li>Add 50 mL Sodium Periodate solution to both; keep in the dark for 30 minutes.</li>
+                            <li>Add 10 mL of 50% Ethylene Glycol; keep in the dark for 20 minutes more.</li>
+                            <li>Titrate sample and blank separately with 0.1250N NaOH to the pH endpoint (Blank ≈ pH 7.5, Sample ≈ pH 8.5).</li>
+                        </ol>
+                    </div>
+                    <div class="formula-display">Gly% = (N × V × 9.209) / WT<br><span style="font-size:0.85em;">V = Sample − Blank</span></div>
+                    <div class="input-group">
+                        <label for="soap-gly-normality">Normality (N)</label>
+                        <input type="number" id="soap-gly-normality" placeholder="0.1" value="0.1" step="0.001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-gly-volume">Sample Burette Reading - mL</label>
+                        <input type="number" id="soap-gly-volume" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-gly-blank">Blank Burette Reading - mL</label>
+                        <input type="number" id="soap-gly-blank" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-gly-weight">Sample Weight (WT) - gm</label>
+                        <input type="number" id="soap-gly-weight" placeholder="0.1" step="0.001">
+                    </div>
+                    <div class="result-box">
+                        <div class="result-label">Glycerine</div>
+                        <div class="result-value" id="soap-gly-result">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+                    <button class="reset-btn" id="soap-gly-reset">Reset</button>
+                </div>
+
+                <!-- EDTA -->
+                <div class="calculator-card" id="card-edta">
+                    <div class="card-header edta">
+                        <div class="card-icon">📊</div>
+                        <h3>EDTA (Metal Content)</h3>
+                    </div>
+                    <div class="test-info"><strong>Principle:</strong> Fat is separated from the soap sample with hot ethanol and HCl, and the aqueous layer (containing EDTA) is pH-adjusted to 4–5. With PAN indicator, it's titrated against standardized Cupric Sulphate until the color turns from yellow to wine red — the copper directly complexes with the EDTA present. (IBM 1145, MPOB Test Method S26:2004)
+                        <br><strong>Preparation steps:</strong>
+                        <ol style="margin:6px 0 0; padding-left:18px;">
+                            <li>Weigh 5 g of the sample into a 250 mL beaker, add 100 mL of 50% Ethanol solution, and heat on a steam bath.</li>
+                            <li>Add 20 mL of 5M HCl, stirring with a glass rod until the fat separates as a clear layer on top.</li>
+                            <li>Harden the fatty layer in the refrigerator, then separate it and filter the bottom (aqueous) solution through Whatman No.1 paper.</li>
+                            <li>Adjust the pH of the filtrate to 4.0–5.0 using dilute NaOH.</li>
+                            <li>Add 5 mL of pH 4 buffer and a few drops of PAN indicator; titrate with standardized Cupric Sulphate until the color changes from yellow to wine red.</li>
+                        </ol>
+                    </div>
+                    <div class="formula-display">EDTA% = (N × V × 37.2) / WT</div>
+                    <div class="input-group">
+                        <label for="soap-edta-normality">Normality (N)</label>
+                        <input type="number" id="soap-edta-normality" placeholder="0.1" value="0.1" step="0.001">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-edta-volume">Burette Reading (V) - mL</label>
+                        <input type="number" id="soap-edta-volume" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <label for="soap-edta-weight">Sample Weight (WT) - gm</label>
+                        <input type="number" id="soap-edta-weight" placeholder="5.0" step="0.01">
+                    </div>
+                    <div class="result-box">
+                        <div class="result-label">EDTA</div>
+                        <div class="result-value" id="soap-edta-result">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+                    <button class="reset-btn" id="soap-edta-reset">Reset</button>
+                </div>
+
+            </div>
+
+                    <section id="soap-final" class="sop">
+                        <header class="sop-head" onclick="stdToggle(this)">
+                            <div>
+                                <h2>Full Specification Comparison</h2>
+                                <div class="meta">Consolidated acceptance limits for all Soap Calculator tests</div>
+                            </div>
+                            <span class="toggle">▼</span>
+                        </header>
+                        <div class="body">
+                            <div class="table-wrap">
+                                <table class="center">
+                                    <thead>
+                                        <tr><th>Test</th><th>LSL</th><th>Target</th><th>USL</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>Free Alkali (FA)</td><td>—</td><td>—</td><td>0.05</td></tr>
+                                        <tr><td>Free Fatty Acid (FFA)</td><td>—</td><td>—</td><td>1</td></tr>
+                                        <tr><td>Brine Sample</td><td>20</td><td>—</td><td>—</td></tr>
+                                        <tr><td>Chloride in Soap</td><td>—</td><td>—</td><td>0.8</td></tr>
+                                        <tr><td>Glycerine</td><td>7.5</td><td>—</td><td>8.5</td></tr>
+                                        <tr><td>EDTA</td><td>0.1</td><td>—</td><td>—</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p style="color:var(--text-light); font-size:12.5px; font-style:italic; margin-top:14px;">— indicates no limit specified for that side of the range. EDTA: 0.1% is the minimum target (LSL).</p>
+                        </div>
+                    </section>
+
+            <div class="footer">
+                <p>IFFCO Egypt Group - SPL-R&amp;D-LAB</p>
+                <p>All calculations use standard analytical chemistry formulas</p>
+                <p class="signature">Powered by Chemist Ali Essam</p>
+            </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function stdToggle(headerEl) {
+            headerEl.parentElement.classList.toggle('collapsed');
+        }
+
+        // TOC active-section highlight
+        function initObservers() {
+            const soapSections = document.querySelectorAll('#tab-soap .layout-with-toc main > section[id], #tab-soap .layout-with-toc main .calculator-grid > [id]');
+            const soapLinks = document.querySelectorAll('#soapToc a');
+            if (soapSections.length && soapLinks.length && typeof IntersectionObserver !== 'undefined') {
+                const soapMap = new Map();
+                soapSections.forEach(s => {
+                    if (s.id) soapMap.set(s.id, document.querySelector('#soapToc a[href="#' + s.id + '"]'));
+                });
+                const io = new IntersectionObserver(entries => {
+                    entries.forEach(e => {
+                        if (e.isIntersecting) {
+                            soapLinks.forEach(a => a.classList.remove('active'));
+                            const link = soapMap.get(e.target.id);
+                            if (link) link.classList.add('active');
+                        }
+                    });
+                }, { rootMargin: '-30% 0px -55% 0px', threshold: 0 });
+                soapSections.forEach(s => io.observe(s));
+            }
+        }
+        document.addEventListener('DOMContentLoaded', initObservers);
+
+        // ============================================================
+        //  SOAP CALCULATORS (مع تعديل Brine Sample)
+        // ============================================================
+        (function() {
+            function updateResult(id, value, decimals) {
+                const el = document.getElementById(id);
+                if (value === null || isNaN(value) || !isFinite(value)) {
+                    el.textContent = '-';
+                    return;
+                }
+                el.textContent = value.toFixed(decimals || 3);
+            }
+
+            // FA
+            function calcFA() {
+                const N = parseFloat(document.getElementById('soap-fa-normality').value) || 0;
+                const V = parseFloat(document.getElementById('soap-fa-volume').value) || 0;
+                const WT = parseFloat(document.getElementById('soap-fa-weight').value) || 0;
+                if (V === 0 || WT === 0) { updateResult('soap-fa-result', null); return; }
+                updateResult('soap-fa-result', (N * V * 4) / WT);
+            }
+            document.getElementById('soap-fa-normality').addEventListener('input', calcFA);
+            document.getElementById('soap-fa-volume').addEventListener('input', calcFA);
+            document.getElementById('soap-fa-weight').addEventListener('input', calcFA);
+            document.getElementById('soap-fa-reset').addEventListener('click', function() {
+                document.getElementById('soap-fa-normality').value = '0.1';
+                document.getElementById('soap-fa-volume').value = '';
+                document.getElementById('soap-fa-weight').value = '';
+                updateResult('soap-fa-result', null);
+            });
+
+            // FFA
+            function calcFFA() {
+                const N = parseFloat(document.getElementById('soap-ffa-normality').value) || 0;
+                const V = parseFloat(document.getElementById('soap-ffa-volume').value) || 0;
+                const WT = parseFloat(document.getElementById('soap-ffa-weight').value) || 0;
+                if (V === 0 || WT === 0) { updateResult('soap-ffa-result', null); return; }
+                updateResult('soap-ffa-result', (N * V * 25.6) / WT);
+            }
+            document.getElementById('soap-ffa-normality').addEventListener('input', calcFFA);
+            document.getElementById('soap-ffa-volume').addEventListener('input', calcFFA);
+            document.getElementById('soap-ffa-weight').addEventListener('input', calcFFA);
+            document.getElementById('soap-ffa-reset').addEventListener('click', function() {
+                document.getElementById('soap-ffa-normality').value = '0.1';
+                document.getElementById('soap-ffa-volume').value = '';
+                document.getElementById('soap-ffa-weight').value = '';
+                updateResult('soap-ffa-result', null);
+            });
+
+            // Brine Sample (كانت Chloride in Lye) - الصيغة الجديدة: القسمة على WT فقط
+            function calcBrine() {
+                const N = parseFloat(document.getElementById('soap-cl-lye-normality').value) || 0;
+                const V = parseFloat(document.getElementById('soap-cl-lye-volume').value) || 0;
+                const WT = parseFloat(document.getElementById('soap-cl-lye-weight').value) || 0;
+                if (V === 0 || WT === 0) { document.getElementById('soap-cl-lye-result').textContent = '-'; return; }
+                const result = (N * V * 5.85) / WT;
+                document.getElementById('soap-cl-lye-result').textContent = result.toFixed(3);
+            }
+            document.getElementById('soap-cl-lye-normality').addEventListener('input', calcBrine);
+            document.getElementById('soap-cl-lye-volume').addEventListener('input', calcBrine);
+            document.getElementById('soap-cl-lye-weight').addEventListener('input', calcBrine);
+            document.getElementById('soap-cl-lye-reset').addEventListener('click', function() {
+                document.getElementById('soap-cl-lye-normality').value = '0.1';
+                document.getElementById('soap-cl-lye-volume').value = '';
+                document.getElementById('soap-cl-lye-weight').value = '';
+                document.getElementById('soap-cl-lye-result').textContent = '-';
+            });
+
+            // Chloride Soap
+            function calcCLSoap() {
+                const N = parseFloat(document.getElementById('soap-cl-soap-normality').value) || 0;
+                const V = parseFloat(document.getElementById('soap-cl-soap-volume').value) || 0;
+                const WT = parseFloat(document.getElementById('soap-cl-soap-weight').value) || 0;
+                if (V === 0 || WT === 0) { updateResult('soap-cl-soap-result', null); return; }
+                updateResult('soap-cl-soap-result', (N * V * 14.6) / WT);
+            }
+            document.getElementById('soap-cl-soap-normality').addEventListener('input', calcCLSoap);
+            document.getElementById('soap-cl-soap-volume').addEventListener('input', calcCLSoap);
+            document.getElementById('soap-cl-soap-weight').addEventListener('input', calcCLSoap);
+            document.getElementById('soap-cl-soap-reset').addEventListener('click', function() {
+                document.getElementById('soap-cl-soap-normality').value = '0.1';
+                document.getElementById('soap-cl-soap-volume').value = '';
+                document.getElementById('soap-cl-soap-weight').value = '';
+                updateResult('soap-cl-soap-result', null);
+            });
+
+            // Glycerine
+            function calcGly() {
+                const N = parseFloat(document.getElementById('soap-gly-normality').value) || 0;
+                const Sample = parseFloat(document.getElementById('soap-gly-volume').value) || 0;
+                const Blank = parseFloat(document.getElementById('soap-gly-blank').value) || 0;
+                const WT = parseFloat(document.getElementById('soap-gly-weight').value) || 0;
+                const V = Sample - Blank;
+                if (Sample === 0 || WT === 0) { updateResult('soap-gly-result', null); return; }
+                updateResult('soap-gly-result', (N * V * 9.209) / WT);
+            }
+            document.getElementById('soap-gly-normality').addEventListener('input', calcGly);
+            document.getElementById('soap-gly-volume').addEventListener('input', calcGly);
+            document.getElementById('soap-gly-blank').addEventListener('input', calcGly);
+            document.getElementById('soap-gly-weight').addEventListener('input', calcGly);
+            document.getElementById('soap-gly-reset').addEventListener('click', function() {
+                document.getElementById('soap-gly-normality').value = '0.1';
+                document.getElementById('soap-gly-volume').value = '';
+                document.getElementById('soap-gly-blank').value = '';
+                document.getElementById('soap-gly-weight').value = '';
+                updateResult('soap-gly-result', null);
+            });
+
+            // EDTA
+            function calcEDTA() {
+                const N = parseFloat(document.getElementById('soap-edta-normality').value) || 0;
+                const V = parseFloat(document.getElementById('soap-edta-volume').value) || 0;
+                const WT = parseFloat(document.getElementById('soap-edta-weight').value) || 0;
+                if (V === 0 || WT === 0) { document.getElementById('soap-edta-result').textContent = '-'; return; }
+                const result = (N * V * 37.2) / WT;
+                document.getElementById('soap-edta-result').textContent = result.toFixed(3);
+            }
+            document.getElementById('soap-edta-normality').addEventListener('input', calcEDTA);
+            document.getElementById('soap-edta-volume').addEventListener('input', calcEDTA);
+            document.getElementById('soap-edta-weight').addEventListener('input', calcEDTA);
+            document.getElementById('soap-edta-reset').addEventListener('click', function() {
+                document.getElementById('soap-edta-normality').value = '0.1';
+                document.getElementById('soap-edta-volume').value = '';
+                document.getElementById('soap-edta-weight').value = '';
+                document.getElementById('soap-edta-result').textContent = '-';
+            });
+
+            // Normality Settings (Soap)
+            const SOAP_NORM_KEY = 'soapqc_normality_v1';
+            const soapMap = {
+                fa: { set: 'soap-set-fa', target: 'soap-fa-normality', fn: calcFA },
+                ffa: { set: 'soap-set-ffa', target: 'soap-ffa-normality', fn: calcFFA },
+                cllye: { set: 'soap-set-cllye', target: 'soap-cl-lye-normality', fn: calcBrine },
+                clsoap: { set: 'soap-set-clsoap', target: 'soap-cl-soap-normality', fn: calcCLSoap },
+                gly: { set: 'soap-set-gly', target: 'soap-gly-normality', fn: calcGly },
+                edta: { set: 'soap-set-edta', target: 'soap-edta-normality', fn: calcEDTA }
+            };
+
+            function soapApply(data) {
+                Object.keys(soapMap).forEach(k => {
+                    const v = data[k];
+                    if (v != null) {
+                        document.getElementById(soapMap[k].target).value = v;
+                        soapMap[k].fn();
+                    }
+                });
+            }
+
+            function soapLoad() {
+                let data = null;
+                try { data = JSON.parse(localStorage.getItem(SOAP_NORM_KEY)); } catch (e) { data = null; }
+                if (!data) return;
+                Object.keys(soapMap).forEach(k => {
+                    if (data[k] != null) document.getElementById(soapMap[k].set).value = data[k];
+                });
+                soapApply(data);
+                document.getElementById('soap-norm-status').textContent = 'Saved values loaded.';
+            }
+
+            document.getElementById('soap-save-btn').addEventListener('click', function() {
+                const data = {};
+                Object.keys(soapMap).forEach(k => {
+                    const v = parseFloat(document.getElementById(soapMap[k].set).value);
+                    data[k] = isNaN(v) ? null : v;
+                });
+                try { localStorage.setItem(SOAP_NORM_KEY, JSON.stringify(data)); } catch (e) {}
+                soapApply(data);
+                document.getElementById('soap-norm-status').textContent = 'Saved values applied.';
+            });
+
+            document.getElementById('soap-clear-btn').addEventListener('click', function() {
+                try { localStorage.removeItem(SOAP_NORM_KEY); } catch (e) {}
+                Object.keys(soapMap).forEach(k => {
+                    document.getElementById(soapMap[k].set).value = '';
+                });
+                document.getElementById('soap-norm-status').textContent = 'Saved values cleared.';
+            });
+
+            soapLoad();
+            calcFA();
+            calcFFA();
+            calcBrine();
+            calcCLSoap();
+            calcGly();
+            calcEDTA();
+        })();
+    </script>
+
+</body>
+</html>

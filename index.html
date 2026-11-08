@@ -76,6 +76,11 @@ td.ex:focus{outline:3px solid #3b82f6;outline-offset:-3px}
 .sj{flex:.7!important;background:transparent!important}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
 #toast.s{opacity:1} .t3ed{border-bottom:1px dashed rgba(255,255,255,.55);outline:none;cursor:text;padding:0 3px;border-radius:2px;min-width:36px;display:inline-block} .t3ed:hover{background:rgba(255,255,255,.16)} .t3ed:focus{background:rgba(255,255,255,.22);border-bottom-style:solid}
+
+#soapqc{scroll-margin-top:76px}
+#soapqc iframe{display:block;width:100%;height:900px;border:1px solid var(--line);border-radius:12px;background:#fff}
+#soapqc .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 6px}
+#soapqc .ctl select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:inherit}
 </style>
 </head>
 <body>
@@ -744,12 +749,89 @@ async function exportXlsx(kind){
  try{await dl.save({filename:nm,data:toXlsx(sh)});toast('Saved')}catch(e){if(!e||e.code!=='declined')toast('Could not save the file')}
 }
 
+/* ============================================================================
+   SOAP QC  \u2014  the Soap_Only calculator page lives inside this app and its
+   results are pushed into the Plodder tables of the picked hour.
+   The calculator keeps its own page (soap-only.html) in an iframe so its
+   "Standardized Normality Settings" stay exactly as they are saved.
+   ============================================================================ */
+var SOAP_H=null;
+function buildSoapQC(){
+ build(CUR);                                   /* the shift's cards must exist to receive the values */
+ var m=document.getElementById('main');
+ var old=document.getElementById('soapqc');if(old)old.remove();
+ var s=document.createElement('section');s.id='soapqc';
+ var hrs=SH[CUR];
+ var opts=hrs.map(function(h){return '<option value="'+h+'"'+(h===SOAP_H?' selected':'')+'>'+pad(h)+'</option>'}).join('');
+ s.innerHTML='<h2>\ud83e\uddf9 Soap QC \u2013 Plodder analyses</h2>'
+  +'<div class="ctl"><label>\u23f0 Hour <select id="soapHour">'+opts+'</select></label>'
+  +'<button id="soapFetch" class="cp">\ud83d\udce5 Fetch \u2192 Plodder table</button>'
+  +'<span class="hint" id="soapHint" style="padding:0"></span></div>'
+  +'<p class="hint" style="margin:4px 0 10px">Do the analysis in the calculator below, pick the hour, then press <b>Fetch</b>. '
+  +'Chloride \u2192 CL% , Glycerine \u2192 Gly% , EDTA \u2192 EDTA% (in the \u201cPlodder (hour)\u201d table) and FFA \u2192 FFA% , FA \u2192 FA% (in the \u201cPlodder\u201d table). '
+  +'Brine stays in the calculator only. If that hour has no Plodder table, nothing happens \u2013 no error.</p>'
+  +'<iframe id="soapFrame" src="soap-only.html" title="Soap calculator" scrolling="no"></iframe>';
+ if(m.children[1])m.insertBefore(s,m.children[1]);else m.appendChild(s);   /* right under the export bar */
+ try{s.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){}
+ var sel=s.querySelector('#soapHour');
+ if(SOAP_H==null)SOAP_H=hrs[0];
+ sel.value=String(SOAP_H);
+ sel.onchange=function(){SOAP_H=+sel.value};
+ s.querySelector('#soapFetch').onclick=soapFetch;
+ var fr=s.querySelector('#soapFrame');
+ function fit(){try{fr.style.height=Math.max(700,(fr.contentDocument&&fr.contentDocument.body?fr.contentDocument.body.scrollHeight:0)+30)+'px'}catch(e){}}
+ fr.onload=function(){fit();setTimeout(fit,400);setTimeout(fit,1200)};
+ setTimeout(fit,900);
+}
+function soapResult(doc,id){
+ var e=doc.getElementById(id);if(!e)return '';
+ var t=String(e.textContent||'').trim();
+ return (t===''||t==='-')?'':t;
+}
+function soapFetch(){
+ var fr=document.getElementById('soapFrame'),hint=document.getElementById('soapHint');
+ function say(t){if(hint)hint.textContent=t}
+ if(!fr||!fr.contentDocument||!fr.contentDocument.body){say('\u23f3 The calculator is still loading \u2013 try again in a second.');return}
+ var d=fr.contentDocument;
+ var card=null;
+ [].forEach.call(document.querySelectorAll('#main .card'),function(c){if(+c._h===+SOAP_H)card=c});
+ if(!card){say('\u26a0 There is no card for '+pad(SOAP_H)+' in this shift.');return}
+ var blk=card.querySelector('.blk');
+ var slot=card.querySelector('.slot');
+ var t3=slot?slot.querySelector('table'):null;
+ var t2=blk?blk.querySelectorAll('table')[1]:null;
+ var done=[],missing=[];
+ if(!t3)missing.push('no Plodder (hour) table');
+ function put(tb,col,val,label){
+  if(!tb||!val)return;
+  var row=tb.rows[2];if(!row||!row.cells[col])return;
+  row.cells[col].textContent=val;
+  row.cells[col].dispatchEvent(new Event('input',{bubbles:true}));
+  done.push(label+' '+val);
+ }
+ put(t3,0,soapResult(d,'soap-cl-soap-result'),'CL%');
+ put(t3,1,soapResult(d,'soap-gly-result'),'Gly%');
+ put(t3,2,soapResult(d,'soap-edta-result'),'EDTA%');
+ put(t2,1,soapResult(d,'soap-ffa-result'),'FFA%');
+ put(t2,2,soapResult(d,'soap-fa-result'),'FA%');
+ if(done.length){
+  say('\u2705 Fetched to '+pad(SOAP_H)+': '+done.join(' \u00b7 ')+(missing.length?' \u2013 \u26a0 '+missing.join(', '):''));
+ }else if(missing.length){
+  say('\u26a0 '+missing.join(', ')+' for '+pad(SOAP_H)+' \u2013 tick \u201cPlodder table\u201d on that hour first. Nothing was changed.');
+ }else{
+  say('\u26a0 Nothing to fetch \u2013 the calculator has no result yet (fill the weight and the burette reading).');
+ }
+ try{toast('Fetched \u2192 Plodder table '+pad(SOAP_H))}catch(e){}
+}
 var tabs=document.getElementById('tabs'),names={A:'09:00 \u2013 15:00',B:'17:00 \u2013 23:00',C:'01:00 \u2013 07:00'};
 Object.keys(SH).forEach(function(k){
  var b=document.createElement('button');b.innerHTML='Shift '+k+'<small>'+names[k]+'</small>';
  b.onclick=function(){[].forEach.call(tabs.children,function(x){x.classList.remove('on')});b.classList.add('on');build(k)};
  tabs.appendChild(b);
 });
+var sq=document.createElement('button');sq.innerHTML='🧹 Soap QC<small>🧹 analyses</small>';
+sq.onclick=function(){[].forEach.call(tabs.children,function(x){x.classList.remove('on')});sq.classList.add('on');buildSoapQC();};
+tabs.appendChild(sq);
 var sj=document.createElement('button');sj.className='sj';sj.innerHTML='Summary<small>↓ tables</small>';sj.onclick=function(){var e=document.getElementById('sum');if(e)e.scrollIntoView({behavior:'smooth'})};tabs.appendChild(sj);
 tabs.children[0].click();
 
