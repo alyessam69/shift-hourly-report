@@ -14,9 +14,26 @@ TFM is recalculated automatically.
 `soap-only.html` is kept in the repository only as a standalone copy of the calculator page;
 the app itself does not load it.
 
+## Write into the factory workbook (Daily Noodles analysis)
+
+The Plodder sheet of this app can be written **straight into** the factory workbook
+(`Daily Noodles analysis 10-2026.xlsx`):
+
+1. Press **📥 Open my file & write into it** (Chrome or Edge on the computer).
+2. The app picks the sheet that was **updated last** (the newest date inside it) and appends the
+   hours of the current shift under the last row that has data - with the same formats as the
+   rest of the sheet and a **thick border** around the new block.
+3. The file is updated **in place** (no download). You can pick another sheet by hand from the
+   **Sheet** list, or press **Open only** / **Write into the file** as two separate steps.
+
+The rows are the same ones the **Export to Excel** produces (one row per hour:
+Date, Time, Sample Point, Odor, Moisture %, FFA%, FA%, Chloride%, Glycerine%, EDTA%, EHDP,
+TFM%, IV).
+
 ## Files (upload all of them to the root of the repository)
 
 - `index.html` - the app (including the Soap QC calculator)
+- `vendor/exceljs.min.js` - the Excel engine used by the "write into your workbook" button
 - `manifest.webmanifest` - install information
 - `sw.js` - offline cache
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`, `favicon.png` - icons

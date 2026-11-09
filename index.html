@@ -851,6 +851,20 @@ body.soapbg{overflow-x:hidden}
 #soapPreview td,#soapPreview th{border-color:var(--line)}
 body.soapbg .ctl{color:var(--mut)}
 
+
+/* ===== WRITE INTO THE FACTORY WORKBOOK ===== */
+.xlbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 14px;font-size:13px;color:var(--mut)}
+.xltop{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.xltitle{font-weight:600;color:var(--ink);margin-right:4px}
+.xlbox button{padding:8px 12px;border:1px solid var(--acc);background:transparent;color:var(--acc);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.xlbox button:hover{background:var(--acc);color:#fff}
+.xlbox button:disabled{opacity:.45;cursor:default}
+.xlbox select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink);max-width:260px}
+.xlbox .hint{padding:0}
+#xlPlan{margin-top:8px;font-size:12.5px;line-height:1.7;color:var(--mut)}
+#xlPlan b{color:var(--ink)}
+#xlNote{margin-top:6px;font-size:12px;line-height:1.6}
+#xlStatus.no{color:#b00020}
 </style>
 </style>
 </head>
@@ -2291,6 +2305,303 @@ function syncPanel(){
   document.addEventListener('visibilitychange',function(){if(!document.hidden)syncPull().catch(syncErr)});
  }
 })();
+</script>
+
+<script>
+(function(){
+var HOST='xlboxHost';
+var BOX='<div class="xlbox" id="xlbox">'
+   +'<div class="xltop">'
+   +'<span class="xltitle">📊 Write into your Excel workbook</span>'
+   +'<button id="xlOpenWrite" type="button">📥 Open my file &amp; write into it</button>'
+   +'<button id="xlOpen" type="button">Open only</button>'
+   +'<button id="xlWrite" type="button">Write into the file</button>'
+   +'<label>Sheet <select id="xlSheet"></select></label>'
+   +'<span class="hint" id="xlStatus" style="padding:0"></span>'
+   +'</div><div id="xlPlan"></div><div id="xlNote"></div></div>';
+/* the app rebuilds the whole page on every tab, so the section is placed again
+   after the export bar every time (and it never loses its state) */
+function ensure(){
+  var main=document.getElementById('main'); if(!main)return;
+  var bar=main.querySelector('.exp'); if(!bar)return;
+  var host=document.getElementById(HOST);
+  if(host&&host.previousElementSibling===bar)return;
+  var h=document.createElement('div'); h.id=HOST; h.innerHTML=BOX;
+  main.insertBefore(h,bar.nextSibling);
+  xlBind();
+}
+function start(){
+  ensure();
+  var main=document.getElementById('main');
+  if(main&&window.MutationObserver){
+    new MutationObserver(function(){ensure()}).observe(main,{childList:true});
+  }
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+else start();
+})();
+/* ============================================================================
+   WRITE INTO THE FACTORY WORKBOOK  (Daily Noodles analysis)
+   The Plodder sheet of this app is written into the workbook the factory
+   keeps open: the sheet that was updated last (the newest date) is the one
+   that gets the rows, exactly like the rest of the sheet (same formats and
+   a thick border around the block).
+   ============================================================================ */
+var xlBook=null, xlHandle=null, xlName='', xlFresh=false;
+
+function xlEngine(){
+  if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  return new Promise(function(res,rej){
+    var sc=document.createElement('script');
+    sc.src='vendor/exceljs.min.js';
+    sc.onload=function(){res(window.ExcelJS)};
+    sc.onerror=function(){rej(new Error('the Excel engine file is missing (vendor/exceljs.min.js)'))};
+    document.head.appendChild(sc);
+  });
+}
+/* the old file picker always gives a real File */
+function xlPickByInput(){
+  return new Promise(function(res){
+    var i=document.createElement('input');
+    i.type='file'; i.accept='.xlsx';
+    i.style.cssText='position:fixed;left:-9999px';
+    i.onchange=function(){var f=i.files&&i.files[0]; i.remove(); res(f||null)};
+    document.body.appendChild(i); i.click();
+  });
+}
+/* Excel serials (1900 system) — built with UTC so the clock of the PC can
+   never move a date by a day */
+function xlSerialDate(d,m,y){ return (Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/86400000 }
+function xlSerialTime(h,mi){ return (h*60+mi)/1440 }
+function xlColNum(L){ return L.charCodeAt(0)-64 }
+/* a cell can hold a real date, a formula, or a typed "29/10/2026" */
+function xlDateVal(v){
+  if(v==null||v==='') return null;
+  if(v instanceof Date){var u=Date.UTC(v.getUTCFullYear(),v.getUTCMonth(),v.getUTCDate());return (u-Date.UTC(1899,11,30))/86400000}
+  if(typeof v==='object'&&v.result!==undefined) return xlDateVal(v.result);
+  if(typeof v==='number'){return (v>20000&&v<80000)?v:null}     /* an Excel serial ✓ */
+  var s=String(v).trim();
+  if(/^[0-9]{4,6}$/.test(s)){var ns=+s; return (ns>20000&&ns<80000)?ns:null}
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){var dd=+m[1],mm=+m[2],yy=+m[3];if(yy<100)yy+=2000;return xlSerialDate(dd,mm,yy)}
+  var t=Date.parse(s); if(!isNaN(t)) return Math.round((t-Date.UTC(1899,11,30))/86400000);
+  return null;
+}
+/* the newest date inside a sheet (column B) */
+function xlSheetMaxDate(ws){
+  var best=null;
+  ws.eachRow({includeEmpty:false},function(row){
+    var d=xlDateVal(row.getCell(2).value);
+    if(d!=null&&(best==null||d>best)) best=d;
+  });
+  return best;
+}
+function xlSerialToDMY(s){
+  var ms=Math.round(s*86400000),d=new Date(ms+Date.UTC(1899,11,30));
+  return ('0'+(d.getUTCDate())).slice(-2)+'/'+('0'+(d.getUTCMonth()+1)).slice(-2)+'/'+d.getUTCFullYear();
+}
+/* every sheet that holds data, newest first */
+function xlSheetList(book){
+  var out=[];
+  (book.worksheets||[]).forEach(function(ws){
+    var d=xlSheetMaxDate(ws);
+    if(d!=null) out.push({ws:ws,max:d});
+  });
+  out.sort(function(a,b){return b.max-a.max});
+  return out;
+}
+/* the first free row = the last row that has data (never a hole in the middle) */
+function xlNextRow(ws,c1,c2){
+  var last=0;
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    for(var c=c1;c<=c2;c++){
+      var v=ws.getCell(rn,c).value;
+      if(v!=null&&String(v).trim()!==''){ if(rn>last) last=rn; return; }
+    }
+  });
+  return last+1;
+}
+function xlStatus(txt,bad){
+  var st=document.getElementById('xlStatus'); if(!st)return;
+  st.textContent=txt||''; st.classList.toggle('no',!!bad);
+}
+/* the sheet the user picked, or the one that was updated last */
+/* the book to work on matters: after a re-read it is a NEW workbook object,
+   so the sheet has to be taken from that very book (not from xlBook) */
+function xlTargetSheet(book){
+  book=book||xlBook;
+  if(!book) return null;
+  var list=xlSheetList(book);
+  if(!list.length) return null;
+  var sel=document.getElementById('xlSheet');
+  if(sel&&sel.value){
+    var hit=list.filter(function(x){return x.ws.name===sel.value})[0];
+    if(hit) return hit;
+  }
+  return list[0];
+}
+function xlFillSheetSelect(){
+  var sel=document.getElementById('xlSheet'); if(!sel||!xlBook)return;
+  var list=xlSheetList(xlBook);
+  var cur=sel.value;
+  sel.innerHTML=list.map(function(x){
+    return '<option value="'+x.ws.name.replace(/"/g,'&quot;')+'">'+x.ws.name.replace(/</g,'&lt;')+' — latest '+xlSerialToDMY(x.max)+'</option>';
+  }).join('');
+  if(cur) sel.value=cur;
+}
+function xlPlan(){
+  var el=document.getElementById('xlPlan'); if(!el||!xlBook)return;
+  var t=xlTargetSheet();
+  if(!t){el.innerHTML='<b>No sheet with a date was found in this workbook.</b>';return}
+  var r=xlNextRow(t.ws,2,18);
+  var n=hourData().length;
+  var first=xlSheetList(xlBook)[0];
+  var why=(first&&t&&t.ws.name===first.ws.name)?'the sheet that was updated last':'your choice';
+  el.innerHTML='<b>📥 '+n+' row(s) → '+t.ws.name+'</b> · starting at row '+r+
+    ' · '+why+' ('+xlSerialToDMY(t.max)+') · date '+curDMY();
+}
+/* one hour = one row, exactly the same values as the Export to Excel sheet */
+function xlWriteRow(ws,r,v,prevR,isFirst,isLast){
+  var letters=['B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
+  letters.forEach(function(L){
+    var c=xlColNum(L);
+    var cell=ws.getCell(r,c), src=ws.getCell(prevR,c);
+    if(src&&src.style) cell.style=JSON.parse(JSON.stringify(src.style));
+    var val=v.v[L];
+    if(L==='B'){
+      var p=curISO().split('-');                    /* iso = yyyy-mm-dd */
+      cell.value=xlSerialDate(+p[2],+p[1],+p[0]);  /* day, month, year ✓ */
+    } else if(L==='C'){
+      var h=parseInt(String(val),10);
+      cell.value=isNaN(h)?(val==null?null:val):xlSerialTime(h,0);
+    } else if(val==null||val===''){
+      cell.value=null;
+    } else if(typeof val==='number'){
+      cell.value=val;
+    } else if(/^-?\d+(\.\d+)?$/.test(String(val).trim())){
+      cell.value=parseFloat(val);
+    } else {
+      cell.value=String(val);
+    }
+    if(v.red&&v.red[L]) cell.font=Object.assign({},cell.font||{},{color:{argb:'FFFF0000'}});
+  });
+  /* the thick border around the block — like the rest of the sheet */
+  for(var c=2;c<=18;c++){
+    var cell=ws.getCell(r,c);
+    var b=Object.assign({},cell.border||{});
+    b.top={style:isFirst?'medium':'thin'};
+    b.bottom={style:isLast?'medium':'thin'};
+    cell.border=b;
+  }
+}
+async function xlLoad(){
+  try{
+    xlStatus('Opening the workbook…');
+    /* the picker MUST be asked for inside the click (the browser wants the
+       user gesture) — so ask first, load the Excel engine while the user picks */
+    var pickPromise, fallback=false;
+    if(window.showOpenFilePicker){
+      pickPromise=window.showOpenFilePicker({
+        multiple:false,
+        types:[{description:'Excel workbook',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]
+      });
+    } else pickPromise=xlPickByInput();
+    pickPromise.catch(function(){});
+    var ExcelJS=await xlEngine();
+    var picked=null;
+    try{ picked=await pickPromise }
+    catch(e){
+      if(e&&e.name==='AbortError'){xlStatus('');return false}   /* the user closed the dialog */
+      fallback=true;                                             /* the browser refused it */
+    }
+    if(picked&&Array.isArray(picked)) picked=picked[0];
+    var handle=null,file=null;
+    if(picked&&typeof picked.getFile==='function'){ handle=picked; file=await picked.getFile() }
+    else if(picked&&typeof picked.arrayBuffer==='function'){ file=picked }
+    else if(picked&&picked.kind==='directory'){
+      xlStatus('⚠ That is a folder — please pick the .xlsx file itself.',true); return false;
+    } else {
+      if(!picked&&!fallback){xlStatus('');return false}
+      console.warn('[xl] the browser gave us something we cannot read:',picked);
+      file=await xlPickByInput();
+      if(!file){xlStatus('');return false}
+    }
+    xlHandle=handle;
+    xlName=(handle&&handle.name)||(file&&file.name)||'workbook.xlsx';
+    xlBook=await new ExcelJS.Workbook().xlsx.load(await file.arrayBuffer());
+    var note=document.getElementById('xlNote');
+    if(note) note.textContent=xlHandle
+      ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
+      : '⚠ This browser cannot write into the file in place. Use Chrome or Edge on the computer for that — here you get the updated file to replace the old one.';
+    xlFresh=true;
+    xlFillSheetSelect();
+    xlPlan();
+    return true;
+  }catch(e){
+    if(e&&e.name==='AbortError'){xlStatus('');return false}
+    xlStatus('ERROR: '+e.message,true);
+    return false;
+  }
+}
+async function xlOpen(){
+  if(await xlLoad()) xlStatus('✅ '+xlName+' is open — check the plan below, then press "Write into the file".');
+}
+async function xlOpenWrite(){
+  if(!await xlLoad()) return;
+  xlStatus('✅ '+xlName+' is open — writing now…');
+  await xlWrite();
+}
+async function xlWrite(){
+  if(!xlBook){xlStatus('Open your Excel file first.',true);return}
+  try{
+    xlStatus('Writing into the workbook…');
+    var ExcelJS=await xlEngine();
+    var book=xlBook;
+    if(xlHandle&&!xlFresh){                    /* re-read: never lose Excel's own edits */
+      var f=await xlHandle.getFile();
+      book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
+    }
+    xlFresh=false;
+    var now=new Date();
+    book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
+    book.modified=now;
+    var t=xlTargetSheet(book);   /* the re-read book, not the old one */
+    if(!t){xlStatus('⚠ No sheet with a date was found in this workbook.',true);return}
+    var ws=t.ws;
+    var X=xs(), data=hourData();
+    var start=xlNextRow(ws,2,18), r=start, wrote=0;
+    data.forEach(function(d){
+      var v=vals('p',d,X);
+      if(!v) return;
+      xlWriteRow(ws,r,v,r-1,r===start,r===start+data.length-1);
+      r++; wrote++;
+    });
+    if(!wrote){xlStatus('Nothing to write in this shift.',true);return}
+    var buf=await book.xlsx.writeBuffer();
+    if(xlHandle){
+      var w=await xlHandle.createWritable();
+      await w.write(buf); await w.close();
+    } else {
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      a.download=xlName||'workbook.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(a.href)},8000);
+    }
+    xlPlan();
+    xlStatus((xlHandle?'✅ ':'⬇️ ')+wrote+' row(s) written to '+ws.name+' (row '+start+'–'+(start+wrote-1)+')'+
+      (xlHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
+  }catch(e){
+    xlStatus('ERROR: '+e.message,true);
+  }
+}
+function xlBind(){
+  var b=function(id,f){var e=document.getElementById(id);if(e)e.onclick=f};
+  b('xlOpenWrite',xlOpenWrite); b('xlOpen',xlOpen); b('xlWrite',xlWrite);
+  var sel=document.getElementById('xlSheet');
+  if(sel) sel.onchange=function(){xlPlan()};
+}
+
 </script>
 </body>
 </html>
