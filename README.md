@@ -3,9 +3,20 @@
 Hourly Reactor / Plodder tables for Outlook, TFM calculation, summary tables for the
 In Process Report and Daily Noodles sheets, and Export to Excel. Works offline once installed.
 
+## The Soap QC tab
+
+The **🧼 Soap QC** tab holds the soap calculator (Free Alkali, FFA, Brine, Chloride in Soap,
+Glycerine, EDTA) **inside `index.html` itself** - it is part of the page, not a separate file and
+not an iframe. Pick an hour, fill the calculator, then press **📥 Fetch → Plodder table** and the
+results are written straight into that hour's Plodder tables (CL%, Gly%, EDTA%, FFA%, FA%) and the
+TFM is recalculated automatically.
+
+`soap-only.html` is kept in the repository only as a standalone copy of the calculator page;
+the app itself does not load it.
+
 ## Files (upload all of them to the root of the repository)
 
-- `index.html` - the app
+- `index.html` - the app (including the Soap QC calculator)
 - `manifest.webmanifest` - install information
 - `sw.js` - offline cache
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`, `favicon.png` - icons
