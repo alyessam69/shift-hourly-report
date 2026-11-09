@@ -2471,6 +2471,7 @@ function xlWriteRow(ws,r,v,prevR,isFirst,isLast){
     if(L==='B'){
       var p=curISO().split('-');                    /* iso = yyyy-mm-dd */
       cell.value=xlSerialDate(+p[2],+p[1],+p[0]);  /* day, month, year ✓ */
+      cell.numFmt='dd/mm/yyyy';                    /* the factory reads DD/MM/YYYY ✓ */
     } else if(L==='C'){
       var h=parseInt(String(val),10);
       cell.value=isNaN(h)?(val==null?null:val):xlSerialTime(h,0);
