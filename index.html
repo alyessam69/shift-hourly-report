@@ -2589,14 +2589,11 @@ async function xlWrite(){
     var t=xlTargetSheet(book);   /* the re-read book, not the old one */
     if(!t){xlStatus('⚠ No sheet with a date was found in this workbook.',true);return}
     var ws=t.ws;
-    var X=xs(), data=hourData();
-    var start=xlNextRow(ws,2,18), r=start, wrote=0;
-    data.forEach(function(d){
-      var v=vals('p',d,X);
-      if(!v) return;
-      xlWriteRow(ws,r,v,r-1,r===start,r===start+data.length-1);
-      r++; wrote++;
-    });
+    var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes: only the registered hours */
+    var rows=[];
+    data.forEach(function(d){var v=vals('p',d,X); if(v)rows.push(v)});
+    var start=xlNextRow(ws,2,18), r=start, wrote=rows.length;
+    rows.forEach(function(v,i){xlWriteRow(ws,r,v,r-1,i===0,i===rows.length-1); r++});
     if(!wrote){xlStatus('Nothing to write in this shift.',true);return}
     var buf=await book.xlsx.writeBuffer();
     if(xlHandle){
@@ -2716,30 +2713,31 @@ function ipCopyRow(src,dst,r,nr){
     if(cell.style) t.style=JSON.parse(JSON.stringify(cell.style));
   });
 }
-/* a new sheet = the template of the last day, with the hours 01:00-15:00 */
+/* a new sheet = the template of the last day: the header only. The data rows are
+   added by ipWriteHours - and ONLY for the hours that are really registered (the
+   very same rows the Excel export writes). No N/A rows for the missing hours. */
 function ipNewSheet(book,src,name,iso){
   var ws=book.addWorksheet(name);
   for(var c=1;c<=src.columnCount;c++){var col=src.getColumn(c); if(col.width) ws.getColumn(c).width=col.width;}
   var HR=9, last=HR;                       /* rows 1-9 are the report header */
   for(var r=1;r<=HR;r++) ipCopyRow(src,ws,r,r);
+  /* the format of a factory data row - the donor for the rows we add later */
+  var donor=null, donorH=null;
   src.eachRow({includeEmpty:false},function(row,rn){
-    if(rn<=HR)return;
-    var h=ipHourOf(src,rn);
-    if(h==null||h<1||h>15)return;          /* the day of the new sheet: 01:00 -> 15:00 */
-    last++; ipCopyRow(src,ws,rn,last);
+    if(rn<=HR||donor)return;
+    if(ipHourOf(src,rn)==null)return;
+    donorH=row.height; donor={};
+    for(var dc=2;dc<=17;dc++){
+      var sc=src.getCell(rn,dc);
+      if(sc.style)donor[dc]=JSON.parse(JSON.stringify(sc.style));
+    }
   });
+  ws._ipDonor=donor; ws._ipDonorH=donorH;
   /* the merged cells (the title, the header boxes...) */
   var merges=(src.model&&src.model.merges)||[];
   merges.forEach(function(m){try{ws.mergeCells(m)}catch(e){}});
   try{ws.views=[{state:'frozen',xSplit:5,ySplit:HR,topLeftCell:'F'+(HR+1),activeCell:'F'+(HR+1)}];}catch(e){}
   try{ws.pageSetup=Object.assign({},src.pageSetup);}catch(e){}
-  /* the new day on every row of the sheet - and NO old numbers: the copied rows
-     keep the shape and the formats only (G = M/C and I = Alkalinity stay empty,
-     the rest is N/A, exactly like the empty hours of the factory sheets) */
-  for(var r2=HR+1;r2<=last;r2++){
-    ws.getCell(r2,2).value=ipDMY(iso);
-    for(var c2=5;c2<=17;c2++) ws.getCell(r2,c2).value=(c2===7||c2===9)?null:'N/A';
-  }
   return {ws:ws,lastRow:last,headerRow:HR};
 }
 /* the target: the sheet of the day, or a brand new one */
@@ -2768,7 +2766,13 @@ function ipWriteHours(ws,data,X){
     var h=+d.h, r=map[h];
     if(r==null){                     /* that hour is not on the sheet yet -> add it */
       r=last+1;
-      ipCopyRow(ws,ws,last,r);
+      if(ws._ipDonor){                /* a brand new sheet: the format of the factory rows */
+        if(ws._ipDonorH)ws.getRow(r).height=ws._ipDonorH;
+        for(var dc=2;dc<=17;dc++){
+          var dst=ws.getCell(r,dc), st=ws._ipDonor[dc];
+          if(st)dst.style=JSON.parse(JSON.stringify(st));
+        }
+      } else if(last>9){ ipCopyRow(ws,ws,last,r); }
       last=r; map[h]=r;
     }
     for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
@@ -2904,7 +2908,7 @@ async function ipWrite(){
       var made2=ipNewSheet(book,src2,ipNewSheetName(book,curISO()),curISO());
       ws=made2.ws;how='created';name=ws.name;
     }
-    var X=xs(), data=hourData();
+    var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
     var res=ipWriteHours(ws,data,X);
     if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
     var buf=await book.xlsx.writeBuffer();
@@ -2978,25 +2982,33 @@ function swStatus(txt,bad){
   var st=document.getElementById('swStatus'); if(!st)return;
   st.textContent=txt||''; st.classList.toggle('no',!!bad);
 }
-function swBorder(){
-  var b={style:'medium',color:{argb:'FF000000'}};
-  return {top:b,left:b,bottom:b,right:b};
+function swBorderOf(isTop,isBottom,isLeft,isRight){
+ var t=isTop?'medium':'thin',b=isBottom?'medium':'thin',l=isLeft?'medium':'thin',r=isRight?'medium':'thin';
+ return {top:{style:t,color:{argb:'FF000000'}},bottom:{style:b,color:{argb:'FF000000'}},
+         left:{style:l,color:{argb:'FF000000'}},right:{style:r,color:{argb:'FF000000'}}};
 }
 /* the sheet of that day, when it is already in the workbook */
 function swDaySheet(book){
   book=book||swBook; if(!book)return null;
-  var p=String(curISO()).split('-'), d=p[2]+'-'+p[1]+'-'+p[0];
+  var p=String(curISO()).split('-');
   var hit=null;
   (book.worksheets||[]).forEach(function(ws){
     var n=String(ws.name).toLowerCase();
-    if(n.indexOf('swing')>=0&&n.indexOf(d)>=0)hit=ws;
+    if(n.indexOf('swing')<0&&n.indexOf('noodle')<0)return;
+    /* the date in the name: 9-11-2026 or 09-11-2026 - compare it exactly */
+    var m=/(\d{1,2})-(\d{1,2})-(\d{4})/.exec(n);
+    if(!m)return;
+    if(+m[1]===+p[2]&&+m[2]===+p[1]&&m[3]===p[0])hit=ws;
   });
   return hit;
 }
 /* a brand new Swing Noodles sheet - the same shape as the export */
+/* a brand new Swing Noodles sheet - EXACTLY like the original one:
+   the numbering in column A, the two header rows (the names + the specs,
+   merged where there is no spec) and a thick border only on the outside */
 function swCreateSheet(book,name){
   var ws=book.addWorksheet(name);
-  ws.getColumn(1).width=3;
+  ws.getColumn(1).width=5;                                  /* the numbering */
   SCOLS.forEach(function(c,i){ws.getColumn(i+2).width=Math.round((c.w-5)/7*10)/10;});
   var font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
   SCOLS.forEach(function(c,i){
@@ -3004,16 +3016,24 @@ function swCreateSheet(book,name){
     var h=ws.getCell(1,cn); h.value=c.h;
     h.font=font;
     h.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFBDD7EE'}};
-    h.alignment={horizontal:'center',vertical:'middle',wrapText:true}; h.border=swBorder();
+    h.alignment={horizontal:'center',vertical:'middle',wrapText:true};
     var s=ws.getCell(2,cn); s.value=c.sp||'';
     s.font=font;
     s.fill={type:'pattern',pattern:'solid',fgColor:{argb:((c.sp||c.k==='G')?'FFBDD7EE':'FFFFFFFF')}};
-    s.alignment={horizontal:'center',vertical:'middle',wrapText:true}; s.border=swBorder();
+    s.alignment={horizontal:'center',vertical:'middle',wrapText:true};
   });
   ws.getRow(1).height=14.25; ws.getRow(2).height=14.25;
+  /* the header cells that have no spec are merged over the two rows */
+  SCOLS.forEach(function(c,i){ if(c.sp)return; try{ws.mergeCells(1,i+2,2,i+2)}catch(e){} });
+  /* the border of the header: thick on the top, thin everywhere else */
+  for(var r=1;r<=2;r++) for(var cc=2;cc<=11;cc++){
+    ws.getCell(r,cc).border=swBorderOf(r===1,false,cc===2,cc===11);
+  }
   return ws;
 }
 /* the rows of the swing sheet: one line per bag (the reading of that hour) */
+/* the rows of the swing sheet: one line per bag - the same rows the Excel
+   export writes (only the registered hours) and the same look as the original */
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
   var sw=swingRows(reg,X);
@@ -3025,26 +3045,48 @@ function swWriteRows(ws,X){
     if(b&&map[b]==null)map[b]=rn;
     if(rn>last)last=rn;
   });
-  var done=[];
+  /* where does every bag go? */
+  var plan=[];
   sw.rows.forEach(function(r){
     var key=String(r.v.B||'').trim();
     if(!key)return;
     var rn=map[key];
     if(rn==null){rn=last+1;map[key]=rn;last=rn}
+    plan.push({key:key,rn:rn,r:r});
+  });
+  if(!plan.length)return {rows:0,keys:[]};
+  var firstRow=plan[0].rn, lastRow=plan[plan.length-1].rn;
+  /* the row above the block is only a separator now -> thin */
+  if(firstRow>3){
+    for(var cc2=2;cc2<=11;cc2++){
+      var up=ws.getCell(firstRow-1,cc2);
+      var ub=Object.assign({},up.border||{});
+      ub.bottom={style:'thin',color:{argb:'FF000000'}};
+      up.border=ub;
+    }
+  }
+  plan.forEach(function(p){
+    var rn=p.rn, r=p.r;
     var row=ws.getRow(rn); if(!row.height)row.height=14.25;
+    /* the numbering on the left (like the original sheet) */
+    var num=ws.getCell(rn,1);
+    num.value=rn-2;
+    num.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
+    num.alignment={horizontal:'center',vertical:'middle'};
     SCOLS.forEach(function(c,i){
       var cell=ws.getCell(rn,i+2);
       var val=r.v[c.k];
       if(c.k==='C')val=dtxt(curISO(),'dmy');
-      if(val===undefined||val===null)val='';
-      cell.value=String(val);
+      if(val===undefined||val===null||val==='')cell.value=null;
+      else if(typeof val==='number')cell.value=val;
+      else if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))cell.value=parseFloat(val);
+      else cell.value=String(val);
       cell.font={name:'Arial',size:10,bold:true,color:{argb:((r.red&&r.red[c.k])?'FFFF0000':'FF000000')}};
       cell.alignment={horizontal:'center',vertical:'middle'};
-      cell.border=swBorder();
+      cell.border=swBorderOf(rn===firstRow,rn===lastRow,i===0,i===SCOLS.length-1);
     });
-    done.push(key);
   });
-  return {rows:done.length,keys:done};
+  return {rows:plan.length,keys:plan.map(function(p){return p.key})};
 }
 function swFillSelect(){
   var sel=document.getElementById('swSheet'); if(!sel||!swBook)return;
@@ -3056,7 +3098,7 @@ function swFillSelect(){
   (swBook.worksheets||[]).forEach(function(ws){
     opts.push('<option value="'+ws.name.replace(/"/g,'&quot;')+'">'+ws.name.replace(/</g,'&lt;')+'</option>');
   });
-  opts.push('<option value="__new__">➕ Create a new sheet: '+swNewName().replace(/</g,'&lt;')+'</option>');
+  opts.push('<option value="__new__">➕ Create a new sheet'+(CUR==='A'?'': ' (shift A only)')+': '+swNewName().replace(/</g,'&lt;')+'</option>');
   sel.innerHTML=opts.join('');
   var t=swDaySheet(swBook);
   sel.value=t?t.name:'__new__';
@@ -3068,8 +3110,10 @@ function swPlan(){
   var makeNew=(sel&&sel.value==='__new__');
   var nm=makeNew?swNewName():((sel&&sel.value)?sel.value:(t?t.name:swNewName()));
   var br=swBounds(CUR);
+  /* in shift B/C the sheet of the day can only be filled - it is created in A */
+  var blocked=(CUR!=='A'&&!t&&(makeNew||!(sel&&sel.value)));
   el.innerHTML='<b>📥 '+br.tons+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+
-    (makeNew?'a new sheet':'the sheet of that day')+
+    (blocked?'⚠ the sheet of this day is created in shift A':(makeNew?'a new sheet':'the sheet of that day'))+
     ' · shift '+CUR+' · the bags B'+br.st+'→B'+br.en+' · date '+dtxt(curISO(),'dmy');
 }
 async function swLoad(){
@@ -3146,9 +3190,21 @@ async function swWrite(){
     if(!makeNew){
       var t=swDaySheet(book);
       if(t){ws=t;how='existing';name=t.name}
+      else if(sel&&sel.value){         /* the sheet the user picked by hand */
+        var mv=book.getWorksheet(sel.value);
+        if(mv){ws=mv;how='existing';name=mv.name}
+      }
     }
     if(!ws){
-      /* the sheet of that day is not there yet -> create it */
+      /* the sheet of that day is not there yet -> ONLY shift A may create it
+         (the bag numbers are absolute: A = B1..B60, B = B61.., C = B121.. -
+          so the sheet has to start with shift A, otherwise the numbering and
+          the order of the rows would be wrong) */
+      if(CUR!=='A'){
+        swStatus('⚠ The Swing Noodles sheet of this day is created in shift A. '+
+          'Please write it in shift A first — then shift '+CUR+' can fill its own rows.',true);
+        return;
+      }
       var nm=swNewName();
       var ex=book.getWorksheet(nm);
       if(ex){ws=ex;how='existing';name=nm}
@@ -3168,6 +3224,7 @@ async function swWrite(){
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function(){URL.revokeObjectURL(a.href)},8000);
     }
+    swBook=book;                         /* keep the in-memory book in step with the file */
     swFillSelect(); swPlan();
     swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
       (how==='created'?' — the sheet was created':' — the sheet of that day')+
