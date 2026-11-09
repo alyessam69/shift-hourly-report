@@ -2328,7 +2328,7 @@ var BOX='<div class="xlbox" id="xlbox">'
    +'<button id="xlOpenWrite" type="button">📥 Open my file &amp; write into it</button>'
    +'<button id="xlOpen" type="button">Open only</button>'
    +'<button id="xlWrite" type="button">Write into the file</button>'
-   +'<label>Sheet <select id="xlSheet"></select></label>'
+   +'<label id="xlSheetLab" hidden>Sheet <select id="xlSheet"></select></label>'
    +'<span class="hint" id="xlStatus" style="padding:0"></span>'
    +'</div><div id="xlPlan"></div><div id="xlNote"></div></div>';
 /* the app rebuilds the whole page on every tab, so the section is placed again
@@ -2454,6 +2454,7 @@ function xlTargetSheet(book){
 }
 function xlFillSheetSelect(){
   var sel=document.getElementById('xlSheet'); if(!sel||!xlBook)return;
+  var lab=document.getElementById('xlSheetLab'); if(lab)lab.hidden=false;
   var list=xlSheetList(xlBook);
   var cur=sel.value;
   sel.innerHTML=list.map(function(x){
@@ -2627,7 +2628,7 @@ var BOX='<div class="ipbox">'
  +'<button id="ipOpenWrite" type="button">📥 Open my file &amp; write into it</button>'
  +'<button id="ipOpen" type="button">Open only</button>'
  +'<button id="ipWrite" type="button">Write into the file</button>'
- +'<label>Sheet <select id="ipSheet"></select></label>'
+ +'<label id="ipSheetLab" hidden>Sheet <select id="ipSheet"></select></label>'
  +'<span class="hint" id="ipStatus" style="padding:0"></span>'
  +'</div><div id="ipPlan"></div><div id="ipNote"></div></div>';
 function ensure(){
@@ -2785,6 +2786,7 @@ function ipStatus(txt,bad){
 }
 function ipFillSelect(){
   var sel=document.getElementById('ipSheet'); if(!sel||!ipBook)return;
+  var lab=document.getElementById('ipSheetLab'); if(lab)lab.hidden=false;
   var t=ipTarget(ipBook);
   var opts=[];
   ipDaySheets(ipBook).forEach(function(x){
