@@ -1950,10 +1950,10 @@ async function exportXlsx(kind){
 }
 
 /* ============================================================================
-   SOAP QC  \u2014  the Soap_Only calculator page lives inside this app and its
-   results are pushed into the Plodder tables of the picked hour.
-   The calculator keeps its own page (soap-only.html) in an iframe so its
-   "Standardized Normality Settings" stay exactly as they are saved.
+   SOAP QC  —  the Soap_Only calculator lives inside this app (inlined, no
+   iframe) and its results are pushed into the Plodder tables of the picked
+   hour. Its "Standardized Normality Settings" stay exactly as they are saved
+   (localStorage 'soapqc_normality_v1').
    ============================================================================ */
 var SOAP_H=null;
 function buildSoapQC(){
