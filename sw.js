@@ -1,6 +1,6 @@
 /* Shift Hourly Report - service worker (offline cache).
    Bump CACHE whenever you upload new files so phones pick them up. */
-const CACHE = 'shift-report-v18';
+const CACHE = 'shift-report-v19';
 const ASSETS = [
   './',
   './index.html',

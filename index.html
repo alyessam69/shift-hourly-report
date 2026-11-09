@@ -80,17 +80,7 @@ td.ex:focus{outline:3px solid #3b82f6;outline-offset:-3px}
 main.wide{max-width:1400px}
 /* the Soap QC tab shows the calculator page, which is light-only -> force the
    light palette here even when the phone/computer is in dark mode */
-body.soapbg{background:#f3f4f7;color:#1c2230;overflow-x:hidden}
-body.soapbg header{background:#fff;border-bottom-color:#dde1ea}
-body.soapbg h1{color:#1c2230}
-body.soapbg .ib{background:#2d4f70;color:#fff}
-body.soapbg .syncst{color:#6b7380;border-color:#e2e8f0}
-body.soapbg header .tabs button{background:transparent;color:#1c2230;border-color:#dde1ea}
-body.soapbg header .tabs button small{color:#6b7380}
-body.soapbg header .tabs button.on{background:#2d4f70;color:#fff;border-color:#2d4f70}
-body.soapbg header .tabs button.on small{color:#dbe7f3}
-body.soapbg .cp{background:#2d4f70;color:#fff}
-body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;border-color:#dde1ea}
+body.soapbg{overflow-x:hidden}
 #soapqc{scroll-margin-top:76px}
 #soapPreview:empty{display:none}
 #soapPreview{margin:10px 0 14px;padding:10px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;font-size:13px;color:#1f2937}
@@ -119,17 +109,13 @@ body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;bor
             --border: #dde1ea;
             --text-dark: #1c2230;
             --text-light: #6b7385;
-            --bg: #f3f4f7;
             --panel: #ffffff;
-            --ink: #1c2230;
-            --muted: #6b7385;
             --accent-soft: #e9eff6;
             --accent-dark: #24405c;
             --warn: #d97706;
             --warn-soft: #fff4e5;
             --ok: #2e7d32;
             --ok-soft: #e8f5e9;
-            --line: #dde1ea;
             --shadow: 0 4px 14px rgba(20, 40, 80, 0.06);
             --code-bg: #0f172a;
             --code-ink: #e2e8f0;
@@ -799,6 +785,71 @@ body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;bor
         }
     
 #soapqc section,#soapqc .calculator-card{scroll-margin-top:86px}
+
+/* ===== SOAP QC - match the other pages (same tokens, cards, dark mode) ===== */
+#soapqc{
+  --primary:var(--acc);--accent:var(--acc);--secondary:var(--acc);
+  --primary-dark:#24405c;--accent-dark:#24405c;
+  --light-bg:var(--bg);--border:var(--line);--text-dark:var(--ink);--text-light:var(--mut);--muted:var(--mut);
+  --panel:var(--card);--shadow:none;
+  --accent-soft:#e9eff6;--field:#fff;--tint1:#f7f9fc;--tint2:#eef2f7;
+  --warn:#d97706;--warn-soft:#fff4e5;--ok:#2e7d32;--ok-soft:#e8f5e9;--code-bg:#0f172a;--code-ink:#e2e8f0;
+  --info-bg:#fff8e1;--info-ink:#92400e;
+  font-family:-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.4;font-size:15px;min-height:0;
+}
+@media (prefers-color-scheme:dark){
+  #soapqc{
+    --primary-dark:#9cc0e6;--accent-dark:#9cc0e6;
+    --accent-soft:rgba(111,159,208,.14);--field:var(--bg);--tint1:var(--bg);--tint2:var(--bg);
+    --warn:#f59e0b;--warn-soft:rgba(245,158,11,.14);--ok:#66bb6a;--ok-soft:rgba(102,187,106,.14);--code-bg:#0b0e14;
+    --info-bg:rgba(245,158,11,.12);--info-ink:#fbbf24;
+  }
+  #soapqc .card-header.fa .card-icon{background:rgba(220,38,38,.18);color:#f87171}
+  #soapqc .card-header.ffa .card-icon{background:rgba(245,158,11,.18);color:#fbbf24}
+  #soapqc .card-header.chloride-lye .card-icon{background:rgba(2,132,199,.2);color:#38bdf8}
+  #soapqc .card-header.chloride-soap .card-icon{background:rgba(99,102,241,.2);color:#a5b4fc}
+  #soapqc .card-header.glycerine .card-icon{background:rgba(5,150,105,.2);color:#34d399}
+  #soapqc .card-header.edta .card-icon{background:rgba(124,58,237,.2);color:#c4b5fd}
+}
+#soapqc{background:transparent;color:var(--ink)}
+/* cards: same look as .card on the other pages */
+#soapqc .calculator-card,#soapqc .settings-card,#soapqc .sop,#soapqc .intro{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:none}
+#soapqc .calculator-card:hover{transform:none;box-shadow:none}
+#soapqc .layout-with-toc nav.toc{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-top:28px}
+#soapqc .layout-with-toc nav.toc a{color:var(--ink)}
+#soapqc .tab-nav{background:var(--card);box-shadow:none}
+#soapqc .card-header,#soapqc .footer,#soapqc .sop h3{border-color:var(--line)}
+#soapqc .header-soap h2,#soapqc .card-header h3,#soapqc .settings-card h2{color:var(--ink)}
+/* inputs / selects like the .sz and .ctl fields */
+#soapqc .input-group input,#soapqc .calc input,#soapqc .calc select,#soapqc .ctl select{
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px}
+#soapqc .input-group input::placeholder,#soapqc .calc input::placeholder{color:var(--mut);opacity:.7}
+#soapqc .input-group input:focus,#soapqc .calc input:focus,#soapqc .calc select:focus{
+  outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(45,79,112,.18)}
+/* info / formula / result boxes */
+#soapqc .formula-display{background:var(--bg);border-left-color:var(--acc);color:var(--ink)}
+#soapqc .test-info{background:var(--info-bg);color:var(--ink)}
+#soapqc .test-info strong{color:var(--info-ink)}
+#soapqc .result-box{background:var(--bg);border:1px solid var(--acc);border-radius:10px}
+#soapqc .result-value{color:var(--acc)}
+#soapqc .calc{background:var(--bg);border:1px solid var(--line)}
+#soapqc .calc .result{background:var(--card)}
+#soapqc .calc .result .val{color:var(--acc)}
+/* buttons: same as .cp / .ib */
+#soapqc .reset-btn,#soapqc .clear-btn{background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--mut)}
+#soapqc .reset-btn:active,#soapqc .clear-btn:hover{background:var(--bg);border-color:var(--acc);color:var(--acc)}
+#soapqc .save-btn,#soapqc .calc-btn{background:var(--acc);color:#fff;border-radius:9px}
+#soapqc .save-btn:hover,#soapqc .calc-btn:hover{background:var(--acc);filter:brightness(1.1)}
+/* tables */
+#soapqc table,#soapqc .pm-spots-row-table{background:var(--card);color:var(--ink)}
+#soapqc th{background:var(--accent-soft);color:var(--accent-dark)}
+#soapqc th,#soapqc td{border-color:var(--line)}
+/* top bar controls + preview panel that sit above the calculator */
+#soapPreview{background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--ink)}
+#soapPreview th{background:var(--accent-soft);color:var(--accent-dark)}
+#soapPreview td,#soapPreview th{border-color:var(--line)}
+body.soapbg .ctl{color:var(--mut)}
 
 </style>
 </style>
