@@ -80,7 +80,7 @@ td.ex:focus{outline:3px solid #3b82f6;outline-offset:-3px}
 main.wide{max-width:1400px}
 /* the Soap QC tab shows the calculator page, which is light-only -> force the
    light palette here even when the phone/computer is in dark mode */
-body.soapbg{background:#f3f4f7;color:#1c2230}
+body.soapbg{background:#f3f4f7;color:#1c2230;overflow-x:hidden}
 body.soapbg header{background:#fff;border-bottom-color:#dde1ea}
 body.soapbg h1{color:#1c2230}
 body.soapbg .ib{background:#2d4f70;color:#fff}
@@ -467,7 +467,10 @@ body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;bor
             letter-spacing: 0.8px;
         }#soapqc .layout-with-toc main{
             padding: 28px 36px 60px;
-            overflow: hidden;
+            overflow: auto;            /* the wide comparison table scrolls inside, the page never scrolls sideways */
+            min-width: 0;
+            width: 100%;
+            max-width: 100%;
         }
 
         /* ===== OIL & STD STYLES ===== */
