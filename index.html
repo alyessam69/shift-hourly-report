@@ -877,6 +877,11 @@ body.soapbg .ctl{color:var(--mut)}
 #ipPlan b{color:var(--ink)}
 #ipNote{margin-top:6px;font-size:12px;line-height:1.6}
 #ipStatus.no{color:#b00020}
+#swPlan{margin-top:8px;font-size:12.5px;line-height:1.7;color:var(--mut)}
+#swPlan b{color:var(--ink)}
+#swNote{margin-top:6px;font-size:12px;line-height:1.6}
+#swStatus.no{color:#b00020}
+.ipbox input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink);max-width:210px}
 </style>
 </style>
 </head>
@@ -2571,7 +2576,9 @@ async function xlWrite(){
     xlStatus('Writing into the workbook…');
     var ExcelJS=await xlEngine();
     var book=xlBook;
-    if(xlHandle&&!xlFresh){                    /* re-read: never lose Excel's own edits */
+    if(xlHandle){                              /* always re-read the file from the disk:
+                                                    never lose Excel's own edits, nor the rows
+                                                    another section has just written */
       var f=await xlHandle.getFile();
       book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
     }
@@ -2867,7 +2874,7 @@ async function ipWrite(){
     ipStatus('Writing into the report…');
     var ExcelJS=await xlEngine();
     var book=ipBook;
-    if(ipHandle&&!ipFresh){
+    if(ipHandle){                               /* always re-read the file from the disk */
       var f=await ipHandle.getFile();
       book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
     }
@@ -2926,6 +2933,277 @@ function ipBind(){
   if(sel)sel.onchange=function(){ipPlan()};
 }
 
+</script>
+
+<div id="swboxHost"></div>
+<script>
+/* ============================================================================
+   Swing Noodles -> the Swing Noodles sheet of the factory workbook
+   * Shift A (09:00-15:00) starts the day: when the sheet of that day is not
+     there yet it is CREATED (the opposite of the In Process Report, where
+     Shift C starts the day)
+   * Shift B (17:00-23:00) and Shift C (01:00-07:00) fill their own rows of
+     that sheet - the bag numbers are absolute (B1..B60 for A, B61.. for B),
+     so the three shifts never mix
+   * the new sheet is built exactly like the Swing Noodles sheet of the export
+     (the two header rows, the colours, the Arial 10 and the medium borders)
+   ============================================================================ */
+(function(){
+var HOST='swboxHost';
+var BOX='<div class="ipbox">'
+ +'<div class="xltop">'
+ +'<span class="xltitle">🍜 Write into the Swing Noodles sheet</span>'
+ +'<button id="swOpenWrite" type="button">📥 Open my file &amp; write into it</button>'
+ +'<button id="swOpen" type="button">Open only</button>'
+ +'<button id="swWrite" type="button">Write into the file</button>'
+ +'<label id="swSheetLab" hidden>Sheet <select id="swSheet"></select></label>'
+ +'<label id="swNameLab" hidden>New sheet <input id="swNewName" type="text" spellcheck="false"></label>'
+ +'<span class="hint" id="swStatus" style="padding:0"></span>'
+ +'</div><div id="swPlan"></div><div id="swNote"></div></div>';
+
+var swBook=null, swHandle=null, swName='', swFresh=false;
+
+/* the name of a new sheet: "Swing Noodles 9-11-2026" */
+function swDefaultName(){
+  var p=String(curISO()).split('-');
+  return 'Swing Noodles '+(+p[2])+'-'+(+p[1])+'-'+p[0];
+}
+function swNewName(){
+  var el=document.getElementById('swNewName');
+  var v=(el&&el.value)?String(el.value).trim():'';
+  if(!v)v=swDefaultName();
+  return v.replace(/[\\\/\?\*\[\]:]/g,'-');        /* excel hates these in a sheet name */
+}
+function swStatus(txt,bad){
+  var st=document.getElementById('swStatus'); if(!st)return;
+  st.textContent=txt||''; st.classList.toggle('no',!!bad);
+}
+function swBorder(){
+  var b={style:'medium',color:{argb:'FF000000'}};
+  return {top:b,left:b,bottom:b,right:b};
+}
+/* the sheet of that day, when it is already in the workbook */
+function swDaySheet(book){
+  book=book||swBook; if(!book)return null;
+  var p=String(curISO()).split('-'), d=p[2]+'-'+p[1]+'-'+p[0];
+  var hit=null;
+  (book.worksheets||[]).forEach(function(ws){
+    var n=String(ws.name).toLowerCase();
+    if(n.indexOf('swing')>=0&&n.indexOf(d)>=0)hit=ws;
+  });
+  return hit;
+}
+/* a brand new Swing Noodles sheet - the same shape as the export */
+function swCreateSheet(book,name){
+  var ws=book.addWorksheet(name);
+  ws.getColumn(1).width=3;
+  SCOLS.forEach(function(c,i){ws.getColumn(i+2).width=Math.round((c.w-5)/7*10)/10;});
+  var font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
+  SCOLS.forEach(function(c,i){
+    var cn=i+2;
+    var h=ws.getCell(1,cn); h.value=c.h;
+    h.font=font;
+    h.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFBDD7EE'}};
+    h.alignment={horizontal:'center',vertical:'middle',wrapText:true}; h.border=swBorder();
+    var s=ws.getCell(2,cn); s.value=c.sp||'';
+    s.font=font;
+    s.fill={type:'pattern',pattern:'solid',fgColor:{argb:((c.sp||c.k==='G')?'FFBDD7EE':'FFFFFFFF')}};
+    s.alignment={horizontal:'center',vertical:'middle',wrapText:true}; s.border=swBorder();
+  });
+  ws.getRow(1).height=14.25; ws.getRow(2).height=14.25;
+  return ws;
+}
+/* the rows of the swing sheet: one line per bag (the reading of that hour) */
+function swWriteRows(ws,X){
+  var reg=registeredRows(hourData());
+  var sw=swingRows(reg,X);
+  var map={},last=2;
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=2)return;
+    var b=row.getCell(2).value;
+    b=(b==null?'':String(b)).trim();
+    if(b&&map[b]==null)map[b]=rn;
+    if(rn>last)last=rn;
+  });
+  var done=[];
+  sw.rows.forEach(function(r){
+    var key=String(r.v.B||'').trim();
+    if(!key)return;
+    var rn=map[key];
+    if(rn==null){rn=last+1;map[key]=rn;last=rn}
+    var row=ws.getRow(rn); if(!row.height)row.height=14.25;
+    SCOLS.forEach(function(c,i){
+      var cell=ws.getCell(rn,i+2);
+      var val=r.v[c.k];
+      if(c.k==='C')val=dtxt(curISO(),'dmy');
+      if(val===undefined||val===null)val='';
+      cell.value=String(val);
+      cell.font={name:'Arial',size:10,bold:true,color:{argb:((r.red&&r.red[c.k])?'FFFF0000':'FF000000')}};
+      cell.alignment={horizontal:'center',vertical:'middle'};
+      cell.border=swBorder();
+    });
+    done.push(key);
+  });
+  return {rows:done.length,keys:done};
+}
+function swFillSelect(){
+  var sel=document.getElementById('swSheet'); if(!sel||!swBook)return;
+  var lab=document.getElementById('swSheetLab'); if(lab)lab.hidden=false;
+  var nl=document.getElementById('swNameLab'); if(nl)nl.hidden=false;
+  var nm=document.getElementById('swNewName');
+  if(nm&&!nm.value)nm.value=swDefaultName();
+  var opts=[];
+  (swBook.worksheets||[]).forEach(function(ws){
+    opts.push('<option value="'+ws.name.replace(/"/g,'&quot;')+'">'+ws.name.replace(/</g,'&lt;')+'</option>');
+  });
+  opts.push('<option value="__new__">➕ Create a new sheet: '+swNewName().replace(/</g,'&lt;')+'</option>');
+  sel.innerHTML=opts.join('');
+  var t=swDaySheet(swBook);
+  sel.value=t?t.name:'__new__';
+}
+function swPlan(){
+  var el=document.getElementById('swPlan'); if(!el||!swBook)return;
+  var sel=document.getElementById('swSheet');
+  var t=swDaySheet(swBook);
+  var makeNew=(sel&&sel.value==='__new__');
+  var nm=makeNew?swNewName():((sel&&sel.value)?sel.value:(t?t.name:swNewName()));
+  var br=swBounds(CUR);
+  el.innerHTML='<b>📥 '+br.tons+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+
+    (makeNew?'a new sheet':'the sheet of that day')+
+    ' · shift '+CUR+' · the bags B'+br.st+'→B'+br.en+' · date '+dtxt(curISO(),'dmy');
+}
+async function swLoad(){
+  try{
+    swStatus('Opening the workbook…');
+    var pickPromise,fallback=false;
+    if(window.showOpenFilePicker){
+      pickPromise=window.showOpenFilePicker({
+        multiple:false,
+        types:[{description:'Excel workbook',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]
+      });
+    } else pickPromise=xlPickByInput();
+    pickPromise.catch(function(){});
+    var ExcelJS=await xlEngine();
+    var picked=null;
+    try{picked=await pickPromise}
+    catch(e){
+      if(e&&e.name==='AbortError'){swStatus('');return false}
+      fallback=true;
+    }
+    if(picked&&Array.isArray(picked))picked=picked[0];
+    var handle=null,file=null;
+    if(picked&&typeof picked.getFile==='function'){handle=picked;file=await picked.getFile()}
+    else if(picked&&typeof picked.arrayBuffer==='function'){file=picked}
+    else if(picked&&picked.kind==='directory'){swStatus('⚠ That is a folder — please pick the .xlsx file itself.',true);return false}
+    else{
+      if(!picked&&!fallback){swStatus('');return false}
+      console.warn('[sw] the browser gave us something we cannot read:',picked);
+      file=await xlPickByInput();
+      if(!file){swStatus('');return false}
+    }
+    swHandle=handle;
+    swName=(handle&&handle.name)||(file&&file.name)||'workbook.xlsx';
+    swBook=await new ExcelJS.Workbook().xlsx.load(await file.arrayBuffer());
+    var note=document.getElementById('swNote');
+    if(note)note.textContent=swHandle
+      ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
+      : '⚠ This browser cannot write into the file in place. Use Chrome or Edge on the computer for that — here you get the updated file to replace the old one.';
+    swFresh=true;
+    swFillSelect();
+    swPlan();
+    return true;
+  }catch(e){
+    if(e&&e.name==='AbortError'){swStatus('');return false}
+    swStatus('ERROR: '+e.message,true);
+    return false;
+  }
+}
+async function swOpen(){
+  if(await swLoad()) swStatus('✅ '+swName+' is open — check the plan below, then press "Write into the file".');
+}
+async function swOpenWrite(){
+  if(!await swLoad())return;
+  swStatus('✅ '+swName+' is open — writing now…');
+  await swWrite();
+}
+async function swWrite(){
+  if(!swBook){swStatus('Open your workbook first.',true);return}
+  try{
+    swStatus('Writing into the Swing Noodles sheet…');
+    var ExcelJS=await xlEngine();
+    var book=swBook;
+    if(swHandle){                               /* always re-read the file from the disk */
+      var f=await swHandle.getFile();
+      book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
+    }
+    swFresh=false;
+    var now=new Date();
+    book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
+    book.modified=now;
+    var sel=document.getElementById('swSheet');
+    var makeNew=(sel&&sel.value==='__new__');
+    var ws=null,how='',name='';
+    if(!makeNew){
+      var t=swDaySheet(book);
+      if(t){ws=t;how='existing';name=t.name}
+    }
+    if(!ws){
+      /* the sheet of that day is not there yet -> create it */
+      var nm=swNewName();
+      var ex=book.getWorksheet(nm);
+      if(ex){ws=ex;how='existing';name=nm}
+      else{ws=swCreateSheet(book,nm);how='created';name=nm}
+    }
+    var X=xs();
+    var res=swWriteRows(ws,X);
+    if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
+    var buf=await book.xlsx.writeBuffer();
+    if(swHandle){
+      var w=await swHandle.createWritable();
+      await w.write(buf); await w.close();
+    } else {
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      a.download=swName||'workbook.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(a.href)},8000);
+    }
+    swFillSelect(); swPlan();
+    swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
+      (how==='created'?' — the sheet was created':' — the sheet of that day')+
+      (swHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
+  }catch(e){
+    swStatus('ERROR: '+e.message,true);
+  }
+}
+function swBind(){
+  var b=function(id,f){var e=document.getElementById(id);if(e)e.onclick=f};
+  b('swOpenWrite',swOpenWrite); b('swOpen',swOpen); b('swWrite',swWrite);
+  var sel=document.getElementById('swSheet');
+  if(sel)sel.onchange=function(){swPlan()};
+  var nm=document.getElementById('swNewName');
+  if(nm)nm.oninput=function(){swPlan()};
+}
+function ensure(){
+  var main=document.getElementById('main'); if(!main)return;
+  var bar=main.querySelector('.exp'); if(!bar)return;
+  /* the Swing section sits right under the In Process one */
+  var prev=document.getElementById('ipboxHost');
+  var anchor=(prev&&prev.parentNode===main)?prev:bar;
+  var host=document.getElementById(HOST);
+  if(host&&host.previousElementSibling===anchor)return;
+  var h=document.createElement('div'); h.id=HOST; h.innerHTML=BOX;
+  main.insertBefore(h,anchor.nextSibling);
+  swBind();
+}
+function start(){
+  ensure();
+  var main=document.getElementById('main');
+  if(main&&window.MutationObserver)new MutationObserver(function(){ensure()}).observe(main,{childList:true});
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+else start();
+})();
 </script>
 </body>
 </html>
