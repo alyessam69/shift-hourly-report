@@ -80,8 +80,8 @@ td.ex:focus{outline:3px solid #3b82f6;outline-offset:-3px}
 main.wide{max-width:1400px}
 /* the Soap QC tab shows the calculator page, which is light-only -> force the
    light palette here even when the phone/computer is in dark mode */
-body.soapbg{background:#f6f9fc;color:#1c2230}
-body.soapbg header{background:#f6f9fc;border-bottom-color:#e2e8f0}
+body.soapbg{background:#f3f4f7;color:#1c2230}
+body.soapbg header{background:#fff;border-bottom-color:#dde1ea}
 body.soapbg h1{color:#1c2230}
 body.soapbg .ib{background:#2d4f70;color:#fff}
 body.soapbg .syncst{color:#6b7380;border-color:#e2e8f0}
@@ -98,7 +98,10 @@ body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;bor
 #soapPreview table{border-collapse:collapse;margin-top:8px}
 #soapPreview td,#soapPreview th{border:1px solid #e2e8f0;padding:5px 12px;text-align:center;font-weight:600}
 #soapPreview th{background:#eef4fb;color:#1f2937}
-#soapqc iframe{display:block;width:100%;height:900px;border:0;background:#fff}
+#soapqc iframe{display:block;width:100%;height:900px;border:0;background:#f3f4f7}
+#soapNoFrame{margin:10px 0;padding:14px 16px;background:#fff;border:1px solid #dde1ea;border-radius:12px;font-size:14px;color:#1c2230;line-height:1.6}
+#soapNoFrame b{display:block;margin-bottom:6px;font-size:15px}
+#soapNoFrame a{color:#2d4f70;font-weight:600}
 #soapqc .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 6px}
 #soapqc .ctl select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:inherit}
 </style>
@@ -792,6 +795,11 @@ function buildSoapQC(){
   +'<button id="soapShow" class="cp" hidden>\ud83d\udc40 \Show the Plodder table</button>'
   +'<span class="hint" id="soapHint" style="padding:0"></span></div>'
   +'<div id="soapPreview"></div>'
+  +'<div id="soapNoFrame" hidden><b>⚠ The calculator page did not load here</b>'
+  +'This happens when you open the app\'s HTML file straight from the phone\'s file manager '
+  +'(<code>content://…</code>): the calculator is a separate page and the app cannot reach it from there.<br>'
+  +'Open the app on the web and it will load normally: '
+  +'<a href="https://alyessam69.github.io/shift-hourly-report/" target="_blank" rel="noopener">alyessam69.github.io/shift-hourly-report</a></div>'
   +'<iframe id="soapFrame" src="soap-only.html" title="Soap calculator" scrolling="no"></iframe>';
  m.appendChild(s);
  /* the shift's cards stay in the DOM (the Fetch writes into them) but are hidden:
@@ -808,8 +816,14 @@ function buildSoapQC(){
   for(var i=0;i<cards.length;i++){if(+cards[i]._h===+SOAP_H){cards[i].scrollIntoView({behavior:'smooth',block:'start'});break}}};
  var fr=s.querySelector('#soapFrame');
  function fit(){try{fr.style.height=Math.max(700,(fr.contentDocument&&fr.contentDocument.body?fr.contentDocument.body.scrollHeight:0)+30)+'px'}catch(e){}}
- fr.onload=function(){fit();setTimeout(fit,400);setTimeout(fit,1200)};
- setTimeout(fit,900);
+ function reach(){try{return !!(fr.contentDocument&&fr.contentDocument.getElementById('soap-fa-result'))}catch(e){return false}}
+ function check(){
+  var ok=reach(),nf=document.getElementById('soapNoFrame');
+  if(!ok){fr.style.display='none';if(nf)nf.hidden=false}
+  else{fr.style.display='block';if(nf)nf.hidden=true}
+ }
+ fr.onload=function(){fit();check();setTimeout(function(){fit();check()},400);setTimeout(function(){fit();check()},1200)};
+ setTimeout(function(){fit();check()},900);
 }
 function soapResult(doc,id){
  var e=doc.getElementById(id);if(!e)return '';

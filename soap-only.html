@@ -12,26 +12,26 @@
             box-sizing: border-box;
         }
         :root {
-            --primary: #0052CC;
-            --primary-dark: #003399;
-            --secondary: #004499;
-            --accent: #FF6B35;
+            --primary: #2d4f70;
+            --primary-dark: #24405c;
+            --secondary: #1e3a56;
+            --accent: #2d4f70;
             --success: #10B981;
-            --light-bg: #F8FAFC;
-            --border: #E2E8F0;
-            --text-dark: #1F2937;
-            --text-light: #6B7280;
-            --bg: #f6f9fc;
+            --light-bg: #f3f4f7;
+            --border: #dde1ea;
+            --text-dark: #1c2230;
+            --text-light: #6b7385;
+            --bg: #f3f4f7;
             --panel: #ffffff;
-            --ink: #1f2a44;
-            --muted: #5c6786;
-            --accent-soft: #e6f2fb;
-            --accent-dark: #0f5a8a;
+            --ink: #1c2230;
+            --muted: #6b7385;
+            --accent-soft: #e9eff6;
+            --accent-dark: #24405c;
             --warn: #d97706;
             --warn-soft: #fff4e5;
             --ok: #2e7d32;
             --ok-soft: #e8f5e9;
-            --line: #d8e0eb;
+            --line: #dde1ea;
             --shadow: 0 4px 14px rgba(20, 40, 80, 0.06);
             --code-bg: #0f172a;
             --code-ink: #e2e8f0;
@@ -45,30 +45,6 @@
             color: var(--ink);
             line-height: 1.55;
             min-height: 100vh;
-        }
-
-        /* ===== HEADER ===== */
-        header.banner {
-            background: linear-gradient(135deg, #0f5a8a 0%, #1e7fbf 60%, #3aa5e0 100%);
-            color: #fff;
-            padding: 28px 24px 22px;
-            text-align: center;
-        }
-        header.banner h1 {
-            margin: 0 0 4px;
-            font-size: 26px;
-            letter-spacing: 0.3px;
-        }
-        header.banner p {
-            margin: 0;
-            opacity: 0.92;
-            font-size: 15px;
-        }
-        header.banner .small {
-            margin-top: 6px;
-            font-size: 12px;
-            opacity: 0.8;
-            letter-spacing: 0.5px;
         }
 
         /* ===== TAB NAV ===== */
@@ -216,7 +192,7 @@
             color: #0284C7;
         }
         .card-header.chloride-soap .card-icon {
-            background: #E0E7FF;
+            background: #E8EEF6;
             color: #4F46E5;
         }
         .card-header.glycerine .card-icon {
@@ -274,10 +250,10 @@
         .input-group input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.1);
+            box-shadow: 0 0 0 3px rgba(45, 79, 112, 0.12);
         }
         .result-box {
-            background: linear-gradient(135deg, #F0F9FF 0%, #F5F3FF 100%);
+            background: linear-gradient(135deg, #f7f9fc 0%, #eef2f7 100%);
             border: 2px solid var(--primary);
             border-radius: 8px;
             padding: 12px;
@@ -559,8 +535,8 @@
         }
 
         .calc {
-            background: linear-gradient(135deg, #f0f7ff 0%, #e6f2fb 100%);
-            border: 1px solid #b9dcef;
+            background: linear-gradient(135deg, #f5f8fc 0%, #e9eff6 100%);
+            border: 1px solid #d6e0ec;
             border-radius: 10px;
             padding: 18px 20px;
             margin: 14px 0 4px;
@@ -793,7 +769,8 @@
             .layout-with-toc nav.toc {
                 position: relative;
                 height: auto;
-                max-height: 50vh;
+                max-height: 240px;
+                overflow-y: auto;
             }
             .layout-with-toc main {
                 padding: 20px;
@@ -823,9 +800,6 @@
             }
         }
         @media (max-width: 600px) {
-            header.banner h1 {
-                font-size: 20px;
-            }
             .tab-nav {
                 flex-wrap: wrap;
             }
@@ -866,12 +840,6 @@
     </style>
 </head>
 <body>
-
-    <header class="banner">
-        <h1>🧼 IFFCO Egypt · Soap Calculator</h1>
-        <p>Soap QC · FA · FFA · Brine · Chloride · Glycerine · EDTA</p>
-        <div class="small">IFFCO Beauty SOPs · Powered by Chemist Ali Essam</div>
-    </header>
 
     <div class="tab-content active" id="tab-soap">
         <div class="tab-section">
