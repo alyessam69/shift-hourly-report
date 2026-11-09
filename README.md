@@ -30,6 +30,20 @@ The rows are the same ones the **Export to Excel** produces (one row per hour:
 Date, Time, Sample Point, Odor, Moisture %, FFA%, FA%, Chloride%, Glycerine%, EDTA%, EHDP,
 TFM%, IV).
 
+## Write into the In Process Report (Reactor)
+
+The **Reactor** sheet of this app can be written straight into the factory report
+(`In Process Report of Soap Noodles 10-2026.xlsx`):
+
+1. Press **📥 Open my file & write into it** (Chrome or Edge on the computer).
+2. Every day has its own sheet, named `PKOL(85-15) 9-11-2026` (product + day).
+   - **Shift C (01:00-07:00)** starts the day: if the sheet of that day is not there yet it is
+     **created** — a copy of the last day's sheet (same header, shapes, colours, column widths)
+     holding the hours 01:00-15:00 with the new date, and only the C numbers filled in.
+   - **Shift A (09:00-15:00)** and **Shift B (17:00-23:00)** fill their own hours of the sheet of
+     that day; hours that are not on the sheet yet are added.
+3. The file is updated **in place** (no download). The **Sheet** list lets you pick another day.
+
 ## Files (upload all of them to the root of the repository)
 
 - `index.html` - the app (including the Soap QC calculator)

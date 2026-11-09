@@ -865,6 +865,18 @@ body.soapbg .ctl{color:var(--mut)}
 #xlPlan b{color:var(--ink)}
 #xlNote{margin-top:6px;font-size:12px;line-height:1.6}
 #xlStatus.no{color:#b00020}
+
+/* ===== WRITE INTO THE IN PROCESS REPORT (Reactor) ===== */
+.ipbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 14px;font-size:13px;color:var(--mut)}
+.ipbox .xltop{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ipbox button{padding:8px 12px;border:1px solid var(--acc);background:transparent;color:var(--acc);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.ipbox button:hover{background:var(--acc);color:#fff}
+.ipbox select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink);max-width:280px}
+.ipbox .hint{padding:0}
+#ipPlan{margin-top:8px;font-size:12.5px;line-height:1.7;color:var(--mut)}
+#ipPlan b{color:var(--ink)}
+#ipNote{margin-top:6px;font-size:12px;line-height:1.6}
+#ipStatus.no{color:#b00020}
 </style>
 </style>
 </head>
@@ -2601,6 +2613,315 @@ function xlBind(){
   b('xlOpenWrite',xlOpenWrite); b('xlOpen',xlOpen); b('xlWrite',xlWrite);
   var sel=document.getElementById('xlSheet');
   if(sel) sel.onchange=function(){xlPlan()};
+}
+
+</script>
+
+<div id="ipboxHost"></div>
+<script>
+(function(){
+var HOST='ipboxHost';
+var BOX='<div class="ipbox">'
+ +'<div class="xltop">'
+ +'<span class="xltitle">🏭 Write into the In Process Report (Reactor)</span>'
+ +'<button id="ipOpenWrite" type="button">📥 Open my file &amp; write into it</button>'
+ +'<button id="ipOpen" type="button">Open only</button>'
+ +'<button id="ipWrite" type="button">Write into the file</button>'
+ +'<label>Sheet <select id="ipSheet"></select></label>'
+ +'<span class="hint" id="ipStatus" style="padding:0"></span>'
+ +'</div><div id="ipPlan"></div><div id="ipNote"></div></div>';
+function ensure(){
+  var main=document.getElementById('main'); if(!main)return;
+  var bar=main.querySelector('.exp'); if(!bar)return;
+  /* the In Process section sits right under the Daily Noodles one */
+  var prev=document.getElementById('xlboxHost');
+  var anchor=(prev&&prev.parentNode===main)?prev:bar;
+  var host=document.getElementById(HOST);
+  if(host&&host.previousElementSibling===anchor)return;
+  var h=document.createElement('div'); h.id=HOST; h.innerHTML=BOX;
+  main.insertBefore(h,anchor.nextSibling);
+  ipBind();
+}
+function start(){
+  ensure();
+  var main=document.getElementById('main');
+  if(main&&window.MutationObserver)new MutationObserver(function(){ensure()}).observe(main,{childList:true});
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+else start();
+})();
+/* ============================================================================
+   THE REACTOR  ->  "In Process Report of Soap Noodles"
+   One sheet per day, named  "PKOL(85-15) 9-11-2026"  (product + day).
+   Every sheet holds the whole day (01:00 -> 23:00) and each shift fills its
+   own hours:
+     * Shift C (01:00-07:00) starts the day -> if the sheet of that day is not
+       there yet, it is CREATED: a copy of the last day's sheet (same shapes,
+       colours, borders and column widths) with the new date, holding the
+       hours 01:00-15:00; only the C hours get the real numbers.
+     * Shift A (09:00-15:00) and Shift B (17:00-23:00) fill their own rows of
+       the sheet of that day (rows that are not there yet are added).
+   ============================================================================ */
+var ipBook=null, ipHandle=null, ipName='', ipFresh=false;
+
+/* the sheet name carries the day: "PKOL(85-15) 9-11-2026" */
+function ipDateFromName(name){
+  var m=String(name==null?'':name).match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if(!m)return null;
+  return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);   /* -> iso */
+}
+function ipPrefixFromName(name){
+  var m=String(name==null?'':name).match(/^\s*(.*?)\s*\d{1,2}-\d{1,2}-\d{4}/);
+  return m? m[1].trim():'';
+}
+function ipDaySheets(book){
+  var out=[];
+  (book.worksheets||[]).forEach(function(ws){var d=ipDateFromName(ws.name); if(d)out.push({ws:ws,iso:d});});
+  out.sort(function(a,b){return a.iso<b.iso?-1:a.iso>b.iso?1:0});
+  return out;
+}
+/* the hour of a row (the Time column) */
+function ipHourOf(ws,r){
+  var v=ws.getCell(r,3).value;
+  if(v==null||v==='')return null;
+  if(v instanceof Date)return v.getUTCHours();
+  var m=String(v).match(/(\d{1,2}):(\d{2})/);
+  return m? +m[1]:null;
+}
+function ipDMY(iso){
+  var p=String(iso||curISO()).split('-');
+  return ('0'+p[2]).slice(-2)+'/'+('0'+p[1]).slice(-2)+'/'+p[0];
+}
+function ipNewSheetName(book,iso){
+  var days=ipDaySheets(book);
+  var prefix=days.length? ipPrefixFromName(days[days.length-1].ws.name):'PKOL(85-15)';
+  var p=String(iso).split('-');
+  return prefix+' '+(+p[2])+'-'+(+p[1])+'-'+p[0];
+}
+/* copy one row with its format */
+function ipCopyRow(src,dst,r,nr){
+  var s=src.getRow(r), d=dst.getRow(nr);
+  if(s.height) d.height=s.height;
+  s.eachCell({includeEmpty:true},function(cell,cn){
+    var t=dst.getCell(nr,cn);
+    t.value=cell.value;
+    if(cell.style) t.style=JSON.parse(JSON.stringify(cell.style));
+  });
+}
+/* a new sheet = the template of the last day, with the hours 01:00-15:00 */
+function ipNewSheet(book,src,name,iso){
+  var ws=book.addWorksheet(name);
+  for(var c=1;c<=src.columnCount;c++){var col=src.getColumn(c); if(col.width) ws.getColumn(c).width=col.width;}
+  var HR=9, last=HR;                       /* rows 1-9 are the report header */
+  for(var r=1;r<=HR;r++) ipCopyRow(src,ws,r,r);
+  src.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=HR)return;
+    var h=ipHourOf(src,rn);
+    if(h==null||h<1||h>15)return;          /* the day of the new sheet: 01:00 -> 15:00 */
+    last++; ipCopyRow(src,ws,rn,last);
+  });
+  /* the merged cells (the title, the header boxes...) */
+  var merges=(src.model&&src.model.merges)||[];
+  merges.forEach(function(m){try{ws.mergeCells(m)}catch(e){}});
+  try{ws.views=[{state:'frozen',xSplit:5,ySplit:HR,topLeftCell:'F'+(HR+1),activeCell:'F'+(HR+1)}];}catch(e){}
+  try{ws.pageSetup=Object.assign({},src.pageSetup);}catch(e){}
+  /* the new day on every row of the sheet - and NO old numbers: the copied rows
+     keep the shape and the formats only (G = M/C and I = Alkalinity stay empty,
+     the rest is N/A, exactly like the empty hours of the factory sheets) */
+  for(var r2=HR+1;r2<=last;r2++){
+    ws.getCell(r2,2).value=ipDMY(iso);
+    for(var c2=5;c2<=17;c2++) ws.getCell(r2,c2).value=(c2===7||c2===9)?null:'N/A';
+  }
+  return {ws:ws,lastRow:last,headerRow:HR};
+}
+/* the target: the sheet of the day, or a brand new one */
+function ipTarget(book){
+  book=book||ipBook;
+  if(!book)return null;
+  var iso=curISO();
+  var days=ipDaySheets(book);
+  var hit=null;
+  for(var i=0;i<days.length;i++) if(days[i].iso===iso){hit=days[i];break}
+  if(hit) return {ws:hit.ws,how:'existing',iso:iso,name:hit.ws.name};
+  return {ws:null,how:'new',iso:iso,name:ipNewSheetName(book,iso)};
+}
+/* write the hours of the shift into the sheet */
+function ipWriteHours(ws,data,X){
+  var map={},last=0;
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    var h=ipHourOf(ws,rn);
+    if(h!=null&&map[h]==null)map[h]=rn;
+    if(rn>last)last=rn;
+  });
+  var done=[];
+  data.forEach(function(d){
+    var v=vals('r',d,X);
+    if(!v)return;
+    var h=+d.h, r=map[h];
+    if(r==null){                     /* that hour is not on the sheet yet -> add it */
+      r=last+1;
+      ipCopyRow(ws,ws,last,r);
+      last=r; map[h]=r;
+    }
+    for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
+      var L=String.fromCharCode(64+c);
+      var cell=ws.getCell(r,c);
+      var val=v.v[L];
+      if(L==='B'){ cell.value=ipDMY(curISO()); }
+      else if(L==='C'){ cell.value=xlSerialTime(h,0); }
+      else if(val==null||val===''){ cell.value=null; }
+      else if(typeof val==='number'){ cell.value=val; }
+      else if(/^-?\d+(\.\d+)?$/.test(String(val).trim())){ cell.value=parseFloat(val); }
+      else { cell.value=String(val); }
+      if(v.red&&v.red[L]) cell.font=Object.assign({},cell.font||{},{color:{argb:'FFFF0000'}});
+    }
+    done.push(pad(h));
+  });
+  return {rows:done,hours:done.join(',')};
+}
+function ipStatus(txt,bad){
+  var st=document.getElementById('ipStatus'); if(!st)return;
+  st.textContent=txt||''; st.classList.toggle('no',!!bad);
+}
+function ipFillSelect(){
+  var sel=document.getElementById('ipSheet'); if(!sel||!ipBook)return;
+  var t=ipTarget(ipBook);
+  var opts=[];
+  ipDaySheets(ipBook).forEach(function(x){
+    opts.push('<option value="'+x.ws.name.replace(/"/g,'&quot;')+'">'+x.ws.name.replace(/</g,'&lt;')+'</option>');
+  });
+  if(t&&t.how==='new') opts.push('<option value="__new__">➕ Create a new sheet: '+t.name.replace(/</g,'&lt;')+'</option>');
+  sel.innerHTML=opts.join('');
+  sel.value=t?(t.how==='new'?'__new__':t.name):(opts[0]||'');
+}
+function ipPlan(){
+  var el=document.getElementById('ipPlan'); if(!el||!ipBook)return;
+  var t=ipTarget(ipBook);
+  var sel=document.getElementById('ipSheet');
+  var manual=(sel&&sel.value==='__new__');
+  var n=hourData().length;
+  var nm=manual?ipNewSheetName(ipBook,curISO()):(sel&&sel.value?sel.value:t.name);
+  var kind=manual?'a new sheet':'the sheet of that day';
+  el.innerHTML='<b>📥 '+n+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+kind+
+    ' · shift '+CUR+' · the hours '+hourData().map(function(d){return pad(d.h)}).join(',')+' · date '+curDMY();
+}
+async function ipLoad(){
+  try{
+    ipStatus('Opening the In Process Report…');
+    var pickPromise,fallback=false;
+    if(window.showOpenFilePicker){
+      pickPromise=window.showOpenFilePicker({
+        multiple:false,
+        types:[{description:'Excel workbook',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]
+      });
+    } else pickPromise=xlPickByInput();
+    pickPromise.catch(function(){});
+    var ExcelJS=await xlEngine();
+    var picked=null;
+    try{picked=await pickPromise}
+    catch(e){
+      if(e&&e.name==='AbortError'){ipStatus('');return false}
+      fallback=true;
+    }
+    if(picked&&Array.isArray(picked))picked=picked[0];
+    var handle=null,file=null;
+    if(picked&&typeof picked.getFile==='function'){handle=picked;file=await picked.getFile()}
+    else if(picked&&typeof picked.arrayBuffer==='function'){file=picked}
+    else if(picked&&picked.kind==='directory'){ipStatus('⚠ That is a folder — please pick the .xlsx file itself.',true);return false}
+    else{
+      if(!picked&&!fallback){ipStatus('');return false}
+      console.warn('[ip] the browser gave us something we cannot read:',picked);
+      file=await xlPickByInput();
+      if(!file){ipStatus('');return false}
+    }
+    ipHandle=handle;
+    ipName=(handle&&handle.name)||(file&&file.name)||'In Process Report.xlsx';
+    ipBook=await new ExcelJS.Workbook().xlsx.load(await file.arrayBuffer());
+    var note=document.getElementById('ipNote');
+    if(note)note.textContent=ipHandle
+      ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
+      : '⚠ This browser cannot write into the file in place. Use Chrome or Edge on the computer for that — here you get the updated file to replace the old one.';
+    ipFresh=true;
+    ipFillSelect();
+    ipPlan();
+    return true;
+  }catch(e){
+    if(e&&e.name==='AbortError'){ipStatus('');return false}
+    ipStatus('ERROR: '+e.message,true);
+    return false;
+  }
+}
+async function ipOpen(){
+  if(await ipLoad()) ipStatus('✅ '+ipName+' is open — check the plan below, then press "Write into the file".');
+}
+async function ipOpenWrite(){
+  if(!await ipLoad())return;
+  ipStatus('✅ '+ipName+' is open — writing now…');
+  await ipWrite();
+}
+async function ipWrite(){
+  if(!ipBook){ipStatus('Open your In Process Report first.',true);return}
+  try{
+    ipStatus('Writing into the report…');
+    var ExcelJS=await xlEngine();
+    var book=ipBook;
+    if(ipHandle&&!ipFresh){
+      var f=await ipHandle.getFile();
+      book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
+    }
+    ipFresh=false;
+    var now=new Date();
+    book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
+    book.modified=now;
+    /* which sheet? */
+    var sel=document.getElementById('ipSheet');
+    var makeNew=(sel&&sel.value==='__new__');
+    var ws=null,how='',name='';
+    if(!makeNew){
+      var t=ipTarget(book);
+      if(t&&t.ws){ws=t.ws;how='existing';name=ws.name}
+      else{
+        /* the sheet of that day is not there yet -> create it */
+        var days=ipDaySheets(book);
+        if(!days.length){ipStatus('⚠ No day sheet was found in this workbook.',true);return}
+        var src=days[days.length-1].ws;
+        var made=ipNewSheet(book,src,ipNewSheetName(book,curISO()),curISO());
+        ws=made.ws;how='created';name=ws.name;
+      }
+    } else {
+      var days2=ipDaySheets(book);
+      if(!days2.length){ipStatus('⚠ No day sheet was found to copy.',true);return}
+      var src2=days2[days2.length-1].ws;
+      var made2=ipNewSheet(book,src2,ipNewSheetName(book,curISO()),curISO());
+      ws=made2.ws;how='created';name=ws.name;
+    }
+    var X=xs(), data=hourData();
+    var res=ipWriteHours(ws,data,X);
+    if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
+    var buf=await book.xlsx.writeBuffer();
+    if(ipHandle){
+      var w=await ipHandle.createWritable();
+      await w.write(buf); await w.close();
+    } else {
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      a.download=ipName||'In Process Report.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(a.href)},8000);
+    }
+    ipFillSelect(); ipPlan();
+    ipStatus((ipHandle?'✅ ':'⬇️ ')+res.rows.length+' hour(s) ('+res.hours+') written to '+name+
+      (how==='created'?' — the sheet was created':' — the sheet of that day')+
+      (ipHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
+  }catch(e){
+    ipStatus('ERROR: '+e.message,true);
+  }
+}
+function ipBind(){
+  var b=function(id,f){var e=document.getElementById(id);if(e)e.onclick=f};
+  b('ipOpenWrite',ipOpenWrite); b('ipOpen',ipOpen); b('ipWrite',ipWrite);
+  var sel=document.getElementById('ipSheet');
+  if(sel)sel.onchange=function(){ipPlan()};
 }
 
 </script>
