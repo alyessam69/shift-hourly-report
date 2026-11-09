@@ -366,8 +366,11 @@ body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;bor
             margin-bottom: 4px;
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 8px;
-        }#soapqc .settings-card>p{
+        }
+        #soapqc .layout-with-toc main{min-width:0}
+        #soapqc h1,#soapqc h2,#soapqc h3,#soapqc h4,#soapqc p,#soapqc span{overflow-wrap:anywhere}#soapqc .settings-card>p{
             font-size: 0.85rem;
             color: var(--text-light);
             margin-bottom: 16px;
@@ -422,6 +425,7 @@ body.soapbg .ctl input,body.soapbg .ctl select{background:#fff;color:#1c2230;bor
             gap: 0;
             max-width: 1400px;
             margin: 0 auto;
+            min-width: 0;
         }#soapqc .layout-with-toc nav.toc{
             background: #fff;
             border-right: 1px solid var(--line);
