@@ -3034,6 +3034,30 @@ function swCreateSheet(book,name){
 /* the rows of the swing sheet: one line per bag (the reading of that hour) */
 /* the rows of the swing sheet: one line per bag - the same rows the Excel
    export writes (only the registered hours) and the same look as the original */
+var SW_MAXBAG=200;                          /* the whole day has 200 bags: B1..B200 */
+/* does this row have a result at all? (moisture / FA / FFA / colour) */
+function swHasResult(r){
+  var v=(r&&r.v)||{};
+  return ['D','E','F','G','H'].some(function(k){
+    var x=v[k];return x!==undefined&&x!==null&&String(x).trim()!=='';});
+}
+/* a row of the day that has no result yet: the numbering, the bag and the
+   date only - nothing else (and never a "Good" that was not measured) */
+function swBlankRow(ws,rn,key){
+  var row=ws.getRow(rn); if(!row.height)row.height=14.25;
+  var num=ws.getCell(rn,1);
+  num.value=rn-2;
+  num.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
+  num.alignment={horizontal:'center',vertical:'middle'};
+  SCOLS.forEach(function(c,i){
+    var cell=ws.getCell(rn,i+2);
+    if(c.k==='B')cell.value=key;
+    else if(c.k==='C')cell.value=dtxt(curISO(),'dmy');
+    else cell.value=null;
+    cell.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
+    cell.alignment={horizontal:'center',vertical:'middle'};
+  });
+}
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
   var sw=swingRows(reg,X);
@@ -3045,6 +3069,16 @@ function swWriteRows(ws,X){
     if(b&&map[b]==null)map[b]=rn;
     if(rn>last)last=rn;
   });
+  /* the whole day is written: 200 bags. The rows that have no result yet keep
+     only the numbering, the bag and the date - the shift that has the results
+     fills its own rows (the bag numbers are absolute: A = B1.., B = B61..) */
+  for(var n=1;n<=SW_MAXBAG;n++){
+    var bkey='B'+n;
+    if(map[bkey]==null){
+      var brn=last+1; map[bkey]=brn; last=brn;
+      swBlankRow(ws,brn,bkey);
+    }
+  }
   /* where does every bag go? */
   var plan=[];
   sw.rows.forEach(function(r){
@@ -3077,15 +3111,23 @@ function swWriteRows(ws,X){
       var cell=ws.getCell(rn,i+2);
       var val=r.v[c.k];
       if(c.k==='C')val=dtxt(curISO(),'dmy');
+      /* a row without any result must not say that it is "Good" */
+      if((c.k==='I'||c.k==='J')&&!swHasResult(r))val=null;
       if(val===undefined||val===null||val==='')cell.value=null;
       else if(typeof val==='number')cell.value=val;
       else if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))cell.value=parseFloat(val);
       else cell.value=String(val);
       cell.font={name:'Arial',size:10,bold:true,color:{argb:((r.red&&r.red[c.k])?'FFFF0000':'FF000000')}};
       cell.alignment={horizontal:'center',vertical:'middle'};
-      cell.border=swBorderOf(rn===firstRow,rn===lastRow,i===0,i===SCOLS.length-1);
     });
   });
+  /* the border of the whole block: thick (medium) on the outside, thin inside */
+  var bFirst=3, bLast=Math.max(2+SW_MAXBAG,lastRow);
+  for(var br=bFirst;br<=bLast;br++){
+    for(var bi=0;bi<SCOLS.length;bi++){
+      ws.getCell(br,bi+2).border=swBorderOf(br===bFirst,br===bLast,bi===0,bi===SCOLS.length-1);
+    }
+  }
   return {rows:plan.length,keys:plan.map(function(p){return p.key})};
 }
 function swFillSelect(){
@@ -3227,7 +3269,7 @@ async function swWrite(){
     swBook=book;                         /* keep the in-memory book in step with the file */
     swFillSelect(); swPlan();
     swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
-      (how==='created'?' — the sheet was created':' — the sheet of that day')+
+      (how==='created'?(' — the sheet was created with the '+SW_MAXBAG+' bags of the day (B1..B'+SW_MAXBAG+')'):' — the sheet of that day')+
       (swHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     swStatus('ERROR: '+e.message,true);
