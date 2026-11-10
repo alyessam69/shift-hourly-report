@@ -2738,12 +2738,17 @@ function ipNewSheet(book,src,name,iso){
      border between every shift (the last hour of a shift keeps the thick
      bottom line of the factory sheet). The results stay EMPTY: only the date,
      the time and the sample point are there - the shift that writes puts its
-     own numbers in its own rows. */
+     own numbers in its own rows.
+     The sheet starts at the shift that creates it:
+       shift C (01:00) -> the whole day 01:00 -> 23:00
+       shift A (09:00) -> 09:00 -> 23:00 (its own hours + the hours of shift B)
+       shift B (17:00) -> 17:00 -> 23:00 (the day is over) */
+  var fromH=(SH[CUR]&&SH[CUR][0])||1;
   var hours=[];
   src.eachRow({includeEmpty:false},function(row,rn){
     if(rn<=HR)return;
     var h=ipHourOf(src,rn);
-    if(h==null||h<1)return;                /* the day starts at 01:00 */
+    if(h==null||h<fromH)return;             /* there is no 00:00 hour at all */
     hours.push({rn:rn,h:h});
   });
   hours.sort(function(a,b){return a.h-b.h});
@@ -2769,7 +2774,8 @@ function ipNewSheet(book,src,name,iso){
   merges.forEach(function(m){try{ws.mergeCells(m)}catch(e){}});
   try{ws.views=[{state:'frozen',xSplit:5,ySplit:HR,topLeftCell:'F'+(HR+1),activeCell:'F'+(HR+1)}];}catch(e){}
   try{ws.pageSetup=Object.assign({},src.pageSetup);}catch(e){}
-  return {ws:ws,lastRow:last,headerRow:HR};
+  return {ws:ws,lastRow:last,headerRow:HR,from:fromH,
+          to:hours.length?hours[hours.length-1].h:fromH};
 }
 /* the target: the sheet of the day, or a brand new one */
 function ipTarget(book){
@@ -2920,7 +2926,7 @@ async function ipWrite(){
     /* which sheet? */
     var sel=document.getElementById('ipSheet');
     var makeNew=(sel&&sel.value==='__new__');
-    var ws=null,how='',name='';
+    var ws=null,how='',name='',range=null;
     if(!makeNew){
       var t=ipTarget(book);
       if(t&&t.ws){ws=t.ws;how='existing';name=ws.name}
@@ -2930,14 +2936,14 @@ async function ipWrite(){
         if(!days.length){ipStatus('⚠ No day sheet was found in this workbook.',true);return}
         var src=days[days.length-1].ws;
         var made=ipNewSheet(book,src,ipNewSheetName(book,curISO()),curISO());
-        ws=made.ws;how='created';name=ws.name;
+        ws=made.ws;how='created';name=ws.name;range=made;
       }
     } else {
       var days2=ipDaySheets(book);
       if(!days2.length){ipStatus('⚠ No day sheet was found to copy.',true);return}
       var src2=days2[days2.length-1].ws;
       var made2=ipNewSheet(book,src2,ipNewSheetName(book,curISO()),curISO());
-      ws=made2.ws;how='created';name=ws.name;
+      ws=made2.ws;how='created';name=ws.name;range=made2;
     }
     var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
     var res=ipWriteHours(ws,data,X);
@@ -2955,7 +2961,7 @@ async function ipWrite(){
     }
     ipFillSelect(); ipPlan();
     ipStatus((ipHandle?'✅ ':'⬇️ ')+res.rows.length+' hour(s) ('+res.hours+') written to '+name+
-      (how==='created'?' — the sheet was created':' — the sheet of that day')+
+      (how==='created'?(' — the sheet was created with the hours of the day ('+('0'+range.from).slice(-2)+':00 → '+('0'+range.to).slice(-2)+':00)'):' — the sheet of that day')+
       (ipHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     ipStatus('ERROR: '+e.message,true);
