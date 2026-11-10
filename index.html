@@ -2733,6 +2733,37 @@ function ipNewSheet(book,src,name,iso){
     }
   });
   ws._ipDonor=donor; ws._ipDonorH=donorH;
+  /* the WHOLE day is written: the hours of the three shifts (01:00 -> 23:00),
+     the same rows as the factory sheets - with their format and their thick
+     border between every shift (the last hour of a shift keeps the thick
+     bottom line of the factory sheet). The results stay EMPTY: only the date,
+     the time and the sample point are there - the shift that writes puts its
+     own numbers in its own rows. */
+  var hours=[];
+  src.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=HR)return;
+    var h=ipHourOf(src,rn);
+    if(h==null||h<1)return;                /* the day starts at 01:00 */
+    hours.push({rn:rn,h:h});
+  });
+  hours.sort(function(a,b){return a.h-b.h});
+  var r0=HR;
+  hours.forEach(function(x){
+    r0++;
+    ipCopyRow(src,ws,x.rn,r0);              /* the format + the time come with it */
+    for(var dc=5;dc<=19;dc++) ws.getCell(r0,dc).value=null;   /* no N/A, no numbers */
+    ws.getCell(r0,2).value=ipDMY(iso);
+    last=r0;
+  });
+  /* the day starts with a thick line on top (like the factory sheets) */
+  if(last>HR){
+    for(var dc2=2;dc2<=19;dc2++){
+      var top=ws.getCell(HR+1,dc2);
+      var tb=Object.assign({},top.border||{});
+      tb.top={style:'medium',color:{argb:'FF000000'}};
+      top.border=tb;
+    }
+  }
   /* the merged cells (the title, the header boxes...) */
   var merges=(src.model&&src.model.merges)||[];
   merges.forEach(function(m){try{ws.mergeCells(m)}catch(e){}});
@@ -3035,12 +3066,6 @@ function swCreateSheet(book,name){
 /* the rows of the swing sheet: one line per bag - the same rows the Excel
    export writes (only the registered hours) and the same look as the original */
 var SW_MAXBAG=200;                          /* the whole day has 200 bags: B1..B200 */
-/* does this row have a result at all? (moisture / FA / FFA / colour) */
-function swHasResult(r){
-  var v=(r&&r.v)||{};
-  return ['D','E','F','G','H'].some(function(k){
-    var x=v[k];return x!==undefined&&x!==null&&String(x).trim()!=='';});
-}
 /* a row of the day that has no result yet: the numbering, the bag and the
    date only - nothing else (and never a "Good" that was not measured) */
 function swBlankRow(ws,rn,key){
@@ -3111,8 +3136,6 @@ function swWriteRows(ws,X){
       var cell=ws.getCell(rn,i+2);
       var val=r.v[c.k];
       if(c.k==='C')val=dtxt(curISO(),'dmy');
-      /* a row without any result must not say that it is "Good" */
-      if((c.k==='I'||c.k==='J')&&!swHasResult(r))val=null;
       if(val===undefined||val===null||val==='')cell.value=null;
       else if(typeof val==='number')cell.value=val;
       else if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))cell.value=parseFloat(val);
