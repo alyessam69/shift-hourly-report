@@ -2507,6 +2507,7 @@ function xlRowTemplate(ws){
   }
   if(ref==null)ref=4;
   var cols={},h=null;
+  try{var rh=ws.getRow(ref).height; if(rh)h=rh;}catch(e){}
   for(var c2=2;c2<=18;c2++){
     var src=ws.getCell(ref,c2);
     var st=(src&&src.style)?JSON.parse(JSON.stringify(src.style)):null;
@@ -2522,7 +2523,6 @@ function xlRowTemplate(ws){
       fill:{type:'pattern',pattern:'none'}
     };
   }
-  try{var rh=ws.getRow(ref).height; if(rh)h=rh;}catch(e){}
   return {cols:cols,height:h,ref:ref};
 }
 /* the border of a row of the block - exactly like the factory sheets */
@@ -2746,6 +2746,8 @@ function ipHourOf(ws,r){
   var v=ws.getCell(r,3).value;
   if(v==null||v==='')return null;
   if(v instanceof Date)return v.getUTCHours();
+  /* a time that was formatted as text is still a serial number in the file */
+  if(typeof v==='number'){var h=Math.round(v*24); return (h>=0&&h<24)?h:null;}
   var m=String(v).match(/(\d{1,2}):(\d{2})/);
   return m? +m[1]:null;
 }
@@ -2808,12 +2810,20 @@ function ipNewSheet(book,src,name,iso){
     hours.push({rn:rn,h:h});
   });
   hours.sort(function(a,b){return a.h-b.h});
+  var tmpl=ipRowTemplate(src);      /* the clean format of the factory sheet */
   var r0=HR;
   hours.forEach(function(x){
     r0++;
     ipCopyRow(src,ws,x.rn,r0);              /* the format + the time come with it */
     for(var dc=5;dc<=19;dc++) ws.getCell(r0,dc).value=null;   /* no N/A, no numbers */
     ws.getCell(r0,2).value=ipDMY(iso);
+    /* the rows of the new sheet get the clean format too - a broken format in
+       the sheet we copied from must never come to the new sheet */
+    for(var dc2=2;dc2<=17;dc2++){
+      var cell2=ws.getCell(r0,dc2);
+      cell2.style=ipCellStyle(tmpl.cols[dc2],false,false);
+    }
+    if(tmpl.height) ws.getRow(r0).height=tmpl.height;
     last=r0;
   });
   /* the day starts with a thick line on top (like the factory sheets) */
@@ -2846,6 +2856,7 @@ function ipTarget(book){
 }
 /* write the hours of the shift into the sheet */
 function ipWriteHours(ws,data,X){
+  var tmpl=ipRowTemplate(ws);      /* the clean format of the sheet */
   var map={},last=0;
   ws.eachRow({includeEmpty:false},function(row,rn){
     var h=ipHourOf(ws,rn);
@@ -2871,6 +2882,8 @@ function ipWriteHours(ws,data,X){
     for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
       var L=String.fromCharCode(64+c);
       var cell=ws.getCell(r,c);
+      var t=tmpl.cols[c]||{};
+      cell.style=ipCellStyle(t,false,false);   /* a clean format, never a broken one */
       var val=v.v[L];
       if(L==='B'){ cell.value=ipDMY(curISO()); }
       else if(L==='C'){ cell.value=xlSerialTime(h,0); }
@@ -2880,10 +2893,86 @@ function ipWriteHours(ws,data,X){
       else { cell.value=String(val); }
       if(v.red&&v.red[L]) cell.font=Object.assign({},cell.font||{},{color:{argb:'FFFF0000'}});
     }
+    if(tmpl.height) ws.getRow(r).height=tmpl.height;   /* the height of the factory */
     done.push(pad(h));
   });
   ipBlockBorders(ws);            /* the thick line between every shift - always */
   return {rows:done,hours:done.join(',')};
+}
+/* the format of the data rows - taken from the sheet itself (the hand-made
+   first data row) and cleaned up, so the rows we write look EXACTLY like the
+   factory ones even if the rows we paste into have a broken format:
+     - the font, the alignment, the number format and the fill of every column
+     - the height of the row
+   The borders are handled by ipBlockBorders() (the thick line between the
+   shifts and the medium line on the left of the date column). */
+function ipRowKey(ws,rn){
+  var parts=[];
+  for(var c=2;c<=19;c++){
+    var st=ws.getCell(rn,c).style||{};
+    var f=st.font||{},a=st.alignment||{};
+    /* only the properties a person can see - the colours are taken from the
+       row that wins, so two rows with the same look are one group */
+    parts.push([f.name||'',f.size||'',f.bold?'b':'',f.italic?'i':'',
+                a.horizontal||'',a.vertical||'',st.numFmt||'',
+                (st.fill&&st.fill.type)?'f':''].join('|'));
+  }
+  return parts.join('#');
+}
+function ipRowTemplate(ws){
+  var rows=[];
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=9)return;
+    if(ipHourOf(ws,rn)==null)return;
+    rows.push(rn);
+  });
+  /* the MOST COMMON format of the rows wins - a broken row (a wrong font, a
+     colour, a text format...) can never change the format of what we write */
+  var counts={},best=null,bestN=0;
+  rows.forEach(function(rn){
+    var k=ipRowKey(ws,rn);
+    counts[k]=(counts[k]||0)+1;
+    if(counts[k]>bestN){bestN=counts[k];best=rn}
+  });
+  var ref=best||rows[0]||10, cols={},h=null;
+
+  /* the height: the most common one of the rows */
+  var hn={},hb=null,hbN=0;
+  rows.forEach(function(rn){
+    var hh=0; try{hh=ws.getRow(rn).height||0;}catch(e){}
+    if(hh){hn[hh]=(hn[hh]||0)+1; if(hn[hh]>hbN){hbN=hn[hh];hb=hh}}
+  });
+  h=hb||null;
+  for(var c=2;c<=19;c++){
+    var src=ws.getCell(ref,c);
+    var st=(src&&src.style)?JSON.parse(JSON.stringify(src.style)):null;
+    if(!st)st={};
+    var f=st.font||{};
+    cols[c]={
+      numFmt:(c===2)?'dd/mm/yyyy':((c===3)?'h:mm':(st.numFmt||'General')),
+      font:{name:f.name||'Times New Roman', size:f.size||18,
+            bold:(f.bold===undefined?true:f.bold), italic:!!f.italic,
+            underline:f.underline, color:f.color},
+      alignment:{horizontal:((st.alignment&&st.alignment.horizontal)||'center'),
+                 vertical:((st.alignment&&st.alignment.vertical)||'center')},
+      fill:st.fill||{type:'pattern',pattern:'none'},
+      border:st.border||{}
+    };
+  }
+  return {cols:cols,height:h,ref:ref};
+}
+/* the clean format of one cell of a data row */
+function ipCellStyle(t,isTop,isBot){
+  t=t||{};
+  var b=t.border||{};
+  return {
+    numFmt:t.numFmt||'General',
+    font:t.font||{name:'Times New Roman',size:18,bold:true},
+    alignment:t.alignment||{horizontal:'center',vertical:'center'},
+    fill:t.fill||{type:'pattern',pattern:'none'},
+    border:{left:b.left||{style:'thin'}, right:b.right||{style:'thin'},
+            top:{style:isTop?'medium':'thin'}, bottom:{style:isBot?'medium':'thin'}}
+  };
 }
 /* which shift does this hour belong to? */
 function ipBlockOf(h){
@@ -3178,11 +3267,13 @@ var SW_MAXBAG=200;                          /* the whole day has 200 bags: B1..B
 /* a row of the day that has no result yet: the numbering, the bag and the
    date only - nothing else (and never a "Good" that was not measured) */
 function swBlankRow(ws,rn,key){
-  var row=ws.getRow(rn); if(!row.height)row.height=14.25;
+  var row=ws.getRow(rn); row.height=14.25;          /* always the height of the app */
   var num=ws.getCell(rn,1);
   num.value=swBagNo(key,rn);
   num.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
   num.alignment={horizontal:'center',vertical:'middle'};
+  num.numFmt='General';
+  num.fill={type:'pattern',pattern:'none'};
   SCOLS.forEach(function(c,i){
     var cell=ws.getCell(rn,i+2);
     if(c.k==='B')cell.value=key;
@@ -3190,6 +3281,8 @@ function swBlankRow(ws,rn,key){
     else cell.value=null;
     cell.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
     cell.alignment={horizontal:'center',vertical:'middle'};
+    cell.numFmt='General';                         /* never a broken "text" format */
+    cell.fill={type:'pattern',pattern:'none'};     /* never a broken colour */
   });
 }
 /* the number of a bag: B61 -> 61 (the numbering on the left of the sheet) */
@@ -3244,12 +3337,14 @@ function swWriteRows(ws,X){
   }
   plan.forEach(function(p){
     var rn=p.rn, r=p.r;
-    var row=ws.getRow(rn); if(!row.height)row.height=14.25;
+    var row=ws.getRow(rn); row.height=14.25;          /* always the height of the app */
     /* the numbering on the left (like the original sheet) */
     var num=ws.getCell(rn,1);
     num.value=swBagNo(p.key,rn);
     num.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
     num.alignment={horizontal:'center',vertical:'middle'};
+    num.numFmt='General';
+    num.fill={type:'pattern',pattern:'none'};
     SCOLS.forEach(function(c,i){
       var cell=ws.getCell(rn,i+2);
       var val=r.v[c.k];
@@ -3260,6 +3355,8 @@ function swWriteRows(ws,X){
       else cell.value=String(val);
       cell.font={name:'Arial',size:10,bold:true,color:{argb:((r.red&&r.red[c.k])?'FFFF0000':'FF000000')}};
       cell.alignment={horizontal:'center',vertical:'middle'};
+      cell.numFmt='General';                       /* never a broken "text" format */
+      cell.fill={type:'pattern',pattern:'none'};   /* never a broken colour */
     });
   });
   /* the border of the whole block: thick (medium) on the outside, thin inside */
