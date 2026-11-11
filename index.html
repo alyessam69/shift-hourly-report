@@ -2826,7 +2826,50 @@ function ipWriteHours(ws,data,X){
     }
     done.push(pad(h));
   });
+  ipBlockBorders(ws);            /* the thick line between every shift - always */
   return {rows:done,hours:done.join(',')};
+}
+/* which shift does this hour belong to? */
+function ipBlockOf(h){
+  if(h==null)return null;
+  if(SH.C.indexOf(h)>=0)return 'C';
+  if(SH.A.indexOf(h)>=0)return 'A';
+  if(SH.B.indexOf(h)>=0)return 'B';
+  return null;
+}
+/* set one side of the border, keeping the other sides */
+function ipSetSide(ws,rn,dc,side,style){
+  var cell=ws.getCell(rn,dc);
+  var b=Object.assign({},cell.border||{});
+  b[side]={style:style,color:{argb:'FF000000'}};
+  cell.border=b;
+}
+/* the In Process sheet ALWAYS has a thick line between every shift and the
+   next (07:00 / 15:00 / 23:00) and a thick left border on the date column -
+   on a sheet we create and on a sheet that was already there. */
+function ipBlockBorders(ws){
+  var HR=9,rows=[];
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=HR)return;
+    var h=ipHourOf(ws,rn);
+    if(h==null)return;
+    rows.push({rn:rn,h:h});
+  });
+  if(!rows.length)return;
+  var firstRow=rows[0].rn, blocks={};
+  rows.forEach(function(x){
+    var b=ipBlockOf(x.h);
+    if(!b)return;
+    if(!blocks[b]||x.h>blocks[b].h)blocks[b]={rn:x.rn,h:x.h};
+  });
+  /* only the thick lines are set - the rest of the border is left as it is
+     (that is the format of the factory sheets) */
+  for(var r=firstRow;r<=rows[rows.length-1].rn;r++) ipSetSide(ws,r,2,'left','medium');
+  for(var dc=2;dc<=19;dc++) ipSetSide(ws,firstRow,dc,'top','medium');
+  Object.keys(blocks).forEach(function(b){
+    var rn=blocks[b].rn;
+    for(var dc2=2;dc2<=19;dc2++) ipSetSide(ws,rn,dc2,'bottom','medium');
+  });
 }
 function ipStatus(txt,bad){
   var st=document.getElementById('ipStatus'); if(!st)return;
@@ -2930,7 +2973,11 @@ async function ipWrite(){
     if(!makeNew){
       var t=ipTarget(book);
       if(t&&t.ws){ws=t.ws;how='existing';name=ws.name}
-      else{
+      else if(sel&&sel.value){         /* the sheet the user picked by hand */
+        var mv=book.getWorksheet(sel.value);
+        if(mv){ws=mv;how='existing';name=mv.name}
+      }
+      if(!ws){
         /* the sheet of that day is not there yet -> create it */
         var days=ipDaySheets(book);
         if(!days.length){ipStatus('⚠ No day sheet was found in this workbook.',true);return}
@@ -3077,7 +3124,7 @@ var SW_MAXBAG=200;                          /* the whole day has 200 bags: B1..B
 function swBlankRow(ws,rn,key){
   var row=ws.getRow(rn); if(!row.height)row.height=14.25;
   var num=ws.getCell(rn,1);
-  num.value=rn-2;
+  num.value=swBagNo(key,rn);
   num.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
   num.alignment={horizontal:'center',vertical:'middle'};
   SCOLS.forEach(function(c,i){
@@ -3089,21 +3136,30 @@ function swBlankRow(ws,rn,key){
     cell.alignment={horizontal:'center',vertical:'middle'};
   });
 }
+/* the number of a bag: B61 -> 61 (the numbering on the left of the sheet) */
+function swBagNo(key,fallback){
+  var n=parseInt(String(key==null?'':key).replace(/[^0-9]/g,''),10);
+  return isNaN(n)?(fallback-2):n;
+}
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
   var sw=swingRows(reg,X);
-  var map={},last=2;
+  var map={},last=2,firstBag=0;
   ws.eachRow({includeEmpty:false},function(row,rn){
     if(rn<=2)return;
     var b=row.getCell(2).value;
     b=(b==null?'':String(b)).trim();
     if(b&&map[b]==null)map[b]=rn;
+    if(b){var bn=swBagNo(b,0); if(bn&&(!firstBag||bn<firstBag))firstBag=bn;}
     if(rn>last)last=rn;
   });
-  /* the whole day is written: 200 bags. The rows that have no result yet keep
-     only the numbering, the bag and the date - the shift that has the results
-     fills its own rows (the bag numbers are absolute: A = B1.., B = B61..) */
-  for(var n=1;n<=SW_MAXBAG;n++){
+  /* the day is written up to B200. The rows that have no result yet keep only
+     the numbering, the bag and the date - the shift that has the results
+     fills its own rows (the bag numbers are absolute: A = B1.., B = B61..).
+     A sheet that does not exist yet starts at the first bag of the shift that
+     creates it: A -> B1 (the whole day), B -> B61, C -> B121. */
+  if(!firstBag)firstBag=swBounds(CUR).st;
+  for(var n=firstBag;n<=SW_MAXBAG;n++){
     var bkey='B'+n;
     if(map[bkey]==null){
       var brn=last+1; map[bkey]=brn; last=brn;
@@ -3135,7 +3191,7 @@ function swWriteRows(ws,X){
     var row=ws.getRow(rn); if(!row.height)row.height=14.25;
     /* the numbering on the left (like the original sheet) */
     var num=ws.getCell(rn,1);
-    num.value=rn-2;
+    num.value=swBagNo(p.key,rn);
     num.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
     num.alignment={horizontal:'center',vertical:'middle'};
     SCOLS.forEach(function(c,i){
@@ -3157,7 +3213,8 @@ function swWriteRows(ws,X){
       ws.getCell(br,bi+2).border=swBorderOf(br===bFirst,br===bLast,bi===0,bi===SCOLS.length-1);
     }
   }
-  return {rows:plan.length,keys:plan.map(function(p){return p.key})};
+  return {rows:plan.length,keys:plan.map(function(p){return p.key}),
+          from:firstBag,to:SW_MAXBAG};
 }
 function swFillSelect(){
   var sel=document.getElementById('swSheet'); if(!sel||!swBook)return;
@@ -3267,15 +3324,9 @@ async function swWrite(){
       }
     }
     if(!ws){
-      /* the sheet of that day is not there yet -> ONLY shift A may create it
-         (the bag numbers are absolute: A = B1..B60, B = B61.., C = B121.. -
-          so the sheet has to start with shift A, otherwise the numbering and
-          the order of the rows would be wrong) */
-      if(CUR!=='A'){
-        swStatus('⚠ The Swing Noodles sheet of this day is created in shift A. '+
-          'Please write it in shift A first — then shift '+CUR+' can fill its own rows.',true);
-        return;
-      }
+      /* the sheet of that day is not there yet -> create it. It starts at the
+         first bag of the shift that creates it and ends at B200:
+         shift A -> B1 (the whole day), shift B -> B61, shift C -> B121 */
       var nm=swNewName();
       var ex=book.getWorksheet(nm);
       if(ex){ws=ex;how='existing';name=nm}
@@ -3298,7 +3349,7 @@ async function swWrite(){
     swBook=book;                         /* keep the in-memory book in step with the file */
     swFillSelect(); swPlan();
     swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
-      (how==='created'?(' — the sheet was created with the '+SW_MAXBAG+' bags of the day (B1..B'+SW_MAXBAG+')'):' — the sheet of that day')+
+      (how==='created'?(' — the sheet was created with the bags of the day (B'+res.from+'..B'+res.to+')'):' — the sheet of that day')+
       (swHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     swStatus('ERROR: '+e.message,true);
