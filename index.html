@@ -2479,12 +2479,72 @@ function xlPlan(){
     ' · '+why+' ('+xlSerialToDMY(t.max)+') · date '+curDMY();
 }
 /* one hour = one row, exactly the same values as the Export to Excel sheet */
-function xlWriteRow(ws,r,v,prevR,isFirst,isLast){
+/* the format of the rows we write - taken from the rows of the sheet itself and
+   cleaned up, so the new block looks EXACTLY like the rest of the sheet even if
+   the row above (or the empty rows below) has a broken format:
+     - the font, the alignment and the number format of every column
+     - NO fill (a coloured row would come out different)
+     - the borders of the block: medium on the left of B, on the right of R,
+       medium on the top of the first row and on the bottom of the last one
+     - the height of the row
+   If the sheet has no usable row, the format of the factory is used. */
+function xlRowTemplate(ws){
+  var first=null,last=null;
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=3)return;                          /* the header and the specs */
+    for(var c=2;c<=18;c++){
+      var v=ws.getCell(rn,c).value;
+      if(v!=null&&String(v).trim()!==''){ if(first==null)first=rn; last=rn; return; }
+    }
+  });
+  /* the reference is the FIRST row of the data (the hand-made template of the
+     factory - the app never writes there). If it has no usable format, the last
+     row is used instead, and if that fails the format of the factory. */
+  var ref=first;
+  if(ref!=null){
+    var probe=ws.getCell(ref,2);
+    if(!probe||!probe.style||!probe.style.font||!probe.style.font.name) ref=last;
+  }
+  if(ref==null)ref=4;
+  var cols={},h=null;
+  for(var c2=2;c2<=18;c2++){
+    var src=ws.getCell(ref,c2);
+    var st=(src&&src.style)?JSON.parse(JSON.stringify(src.style)):null;
+    if(!st||!st.font||!st.font.name) st=st||{};     /* no usable format? the factory's */
+    var f=(st&&st.font)||{};
+    cols[c2]={
+      numFmt:(c2===2)?'dd/mm/yyyy':((c2===3)?'h:mm':((st&&st.numFmt)||'General')),
+      font:{name:f.name||'Times New Roman', size:f.size||(c2===2?10:9),
+            bold:(f.bold===undefined?true:f.bold), italic:!!f.italic,
+            underline:f.underline, color:f.color},
+      alignment:{horizontal:((st&&st.alignment&&st.alignment.horizontal)||'center'),
+                 vertical:((st&&st.alignment&&st.alignment.vertical)||'center')},
+      fill:{type:'pattern',pattern:'none'}
+    };
+  }
+  try{var rh=ws.getRow(ref).height; if(rh)h=rh;}catch(e){}
+  return {cols:cols,height:h,ref:ref};
+}
+/* the border of a row of the block - exactly like the factory sheets */
+function xlBlockBorder(isFirst,isLast,c){
+  return {top:{style:isFirst?'medium':'thin'},
+          bottom:{style:isLast?'medium':'thin'},
+          left:{style:c===2?'medium':'thin'},
+          right:{style:c===18?'medium':'thin'}};
+}
+function xlWriteRow(ws,r,v,tmpl,isFirst,isLast){
   var letters=['B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
   letters.forEach(function(L){
     var c=xlColNum(L);
-    var cell=ws.getCell(r,c), src=ws.getCell(prevR,c);
-    if(src&&src.style) cell.style=JSON.parse(JSON.stringify(src.style));
+    var cell=ws.getCell(r,c);
+    var t=(tmpl&&tmpl.cols&&tmpl.cols[c])||{};
+    cell.style={                       /* a clean format - never the broken one */
+      numFmt:t.numFmt||'General',
+      font:t.font||{name:'Times New Roman',size:9,bold:true},
+      alignment:t.alignment||{horizontal:'center',vertical:'center'},
+      fill:t.fill||{type:'pattern',pattern:'none'},
+      border:xlBlockBorder(isFirst,isLast,c)
+    };
     var val=v.v[L];
     if(L==='B'){
       var p=curISO().split('-');                    /* iso = yyyy-mm-dd */
@@ -2504,14 +2564,9 @@ function xlWriteRow(ws,r,v,prevR,isFirst,isLast){
     }
     if(v.red&&v.red[L]) cell.font=Object.assign({},cell.font||{},{color:{argb:'FFFF0000'}});
   });
-  /* the thick border around the block — like the rest of the sheet */
-  for(var c=2;c<=18;c++){
-    var cell=ws.getCell(r,c);
-    var b=Object.assign({},cell.border||{});
-    b.top={style:isFirst?'medium':'thin'};
-    b.bottom={style:isLast?'medium':'thin'};
-    cell.border=b;
-  }
+  /* the first column of the sheet is empty in the factory - clean it too */
+  ws.getCell(r,1).value=null;
+  if(tmpl&&tmpl.height) ws.getRow(r).height=tmpl.height;
 }
 async function xlLoad(){
   try{
@@ -2593,7 +2648,8 @@ async function xlWrite(){
     var rows=[];
     data.forEach(function(d){var v=vals('p',d,X); if(v)rows.push(v)});
     var start=xlNextRow(ws,2,18), r=start, wrote=rows.length;
-    rows.forEach(function(v,i){xlWriteRow(ws,r,v,r-1,i===0,i===rows.length-1); r++});
+    var tmpl=xlRowTemplate(ws);       /* the clean format of the sheet */
+    rows.forEach(function(v,i){xlWriteRow(ws,r,v,tmpl,i===0,i===rows.length-1); r++});
     if(!wrote){xlStatus('Nothing to write in this shift.',true);return}
     var buf=await book.xlsx.writeBuffer();
     if(xlHandle){
