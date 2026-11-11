@@ -3532,5 +3532,52 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 else start();
 })();
 </script>
+<script>
+/* ============================================================================
+   OPEN AT THE HOUR OF THE DAY
+   The factory does not work with "a shift" - the operator opens the app at
+   whatever hour it is and has to land on that hour straight away. So on open
+   we jump to the shift that covers the current hour and scroll to its card.
+   ============================================================================ */
+(function(){
+  function currentHour(){ return new Date().getHours(); }
+  /* the shift that covers this hour (A 09-15, B 17-23, C 01-07) */
+  function shiftOfHour(h){
+    var keys=Object.keys(SH);
+    for(var i=0;i<keys.length;i++) if(SH[keys[i]].indexOf(h)>=0) return keys[i];
+    return null;
+  }
+  function cardOfHour(h){
+    var cards=document.querySelectorAll('#main .card'),fallback=null;
+    for(var i=0;i<cards.length;i++){
+      var c=cards[i];
+      if(c._h==null) continue;
+      if(c._h===h) return c;
+      if(!fallback) fallback=c;
+    }
+    return fallback;
+  }
+  function scrollToHour(h){
+    var card=cardOfHour(h);
+    if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  function go(){
+    var h=currentHour(),k=shiftOfHour(h);
+    if(k&&k!==CUR){                 /* the hour belongs to another shift -> go there */
+      var tabs=document.getElementById('tabs'),btn=null;
+      for(var i=0;i<tabs.children.length;i++){
+        if(tabs.children[i].textContent.indexOf('Shift '+k)===0){btn=tabs.children[i];break}
+      }
+      if(btn) btn.click();
+    }
+    /* the app draws everything a moment later, so we scroll again once the
+       page has its final height (the first scroll can be clamped) */
+    setTimeout(function(){ scrollToHour(h); },150);
+    setTimeout(function(){ scrollToHour(h); },700);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',go);
+  else setTimeout(go,60);
+})();
+</script>
 </body>
 </html>
