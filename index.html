@@ -3540,7 +3540,11 @@ else start();
    we jump to the shift that covers the current hour and scroll to its card.
    ============================================================================ */
 (function(){
-  function currentHour(){ return new Date().getHours(); }
+  function currentHour(){
+    var h=new Date().getHours();
+    /* 00:00 is the first hour of shift C (01:00) */
+    return (h===0)?1:h;
+  }
   /* the shift that covers this hour (A 09-15, B 17-23, C 01-07) */
   function shiftOfHour(h){
     var keys=Object.keys(SH);
