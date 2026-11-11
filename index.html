@@ -3559,7 +3559,12 @@ else start();
   }
   function scrollToHour(h){
     var card=cardOfHour(h);
-    if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
+    if(!card)return;
+    /* the header is sticky - stop the card just below it, so the hour is seen */
+    var top=card.getBoundingClientRect().top+window.scrollY;
+    var head=document.querySelector('header');
+    var off=(head?Math.round(head.getBoundingClientRect().height):0)+10;
+    window.scrollTo({top:Math.max(0,top-off),behavior:'smooth'});
   }
   function go(){
     var h=currentHour(),k=shiftOfHour(h);
