@@ -37,12 +37,36 @@ The **Reactor** sheet of this app can be written straight into the factory repor
 
 1. Press **📥 Open my file & write into it** (Chrome or Edge on the computer).
 2. Every day has its own sheet, named `PKOL(85-15) 9-11-2026` (product + day).
-   - **Shift C (01:00-07:00)** starts the day: if the sheet of that day is not there yet it is
-     **created** — a copy of the last day's sheet (same header, shapes, colours, column widths)
-     holding the hours 01:00-15:00 with the new date, and only the C numbers filled in.
-   - **Shift A (09:00-15:00)** and **Shift B (17:00-23:00)** fill their own hours of the sheet of
-     that day; hours that are not on the sheet yet are added.
+   - The sheet of the day **starts at the shift that creates it**:
+     **Shift C (01:00-07:00)** → the whole day 01:00-23:00 · **Shift A (09:00-15:00)** →
+     09:00-23:00 (its own hours + the hours of shift B) · **Shift B (17:00-23:00)** → 17:00-23:00
+     (the day is over).
+   - The sheet is a copy of the last day's sheet (same header, shapes, colours, column widths) with
+     the hours of the day and the new date; only the shift that writes fills its own numbers, the
+     other hours stay empty.
+   - **Shift A** and **Shift B** fill their own hours of the sheet of that day; hours that are not on
+     the sheet yet are added.
+   - Every shift block keeps a **thick line** at its end (07:00 · 15:00 · 23:00), like the factory.
 3. The file is updated **in place** (no download). The **Sheet** list lets you pick another day.
+
+## Write into the Swing Noodles sheet
+
+The Swing rows go into the sheet `Swing Noodles <d>-<m>-<yyyy>` of the same workbook:
+
+1. Press **📥 Open my file & write into it**.
+2. The sheet **starts at the first bag of the shift that creates it** and ends at **B200**:
+   **Shift A** → B1-B200 (the whole day) · **Shift B** → B61-B200 · **Shift C** → B121-B200.
+   The numbering on the left is the number of the bag.
+3. The shift that writes fills **its own** bags; the rows of the other shifts keep only the
+   numbering, the bag and the date.
+
+## The rows always look like the factory ones
+
+Every sheet that is written takes the format of the factory: each column uses the **most common**
+look of its own rows, the borders of the block are the factory's (a thick line on the top of the
+first row and on the bottom of the last one) and the height of the row is the factory's.
+A broken format in the file — a wrong font, a colour, a *text* number format, a wrong height —
+can never come into the new rows.
 
 ## Files (upload all of them to the root of the repository)
 
