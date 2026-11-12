@@ -14,6 +14,21 @@ TFM is recalculated automatically.
 `soap-only.html` is kept in the repository only as a standalone copy of the calculator page;
 the app itself does not load it.
 
+## The Fill box
+
+Beside the tick of every hour there is a **box + a "Fill" button**. Write the readings of the
+hour in it and press **Fill**:
+
+```
+25  0.06  15  0.1      ->  Reactor 25 / 0.06   ·   Plodder 15 / 0.1
+```
+
+- the **moisture** says which is which: **21-27 = Reactor**, **11-17 = Plodder**
+- the **first FA = Reactor**, the **second FA = Plodder**
+- with three numbers only: Reactor MC + FA + the Plodder's MC
+- the values are saved with the shift and the **TFM** is worked out again
+- a wrong text changes nothing and tells you the right way to write it
+
 ## Write into the factory workbook (Daily Noodles analysis)
 
 The Plodder sheet of this app can be written **straight into** the factory workbook
