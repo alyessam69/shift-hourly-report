@@ -3676,6 +3676,9 @@ else start();
         doFill(card,bx);
       }})(c,box);
       box.oninput=(function(card,bx){return function(){saveBox(card._h,bx.value)}})(c,box);
+      /* the whole text is selected -> type straight over it, no manual clearing */
+      box.onfocus=(function(bx){return function(){try{bx.select()}catch(e){}}})(box);
+      box.onclick=(function(bx){return function(){try{bx.select()}catch(e){}}})(box);
       var wrap=document.createElement('span');
       wrap.style.cssText='display:inline-flex;gap:5px;align-items:center;flex:0 0 auto;';
       wrap.appendChild(box);wrap.appendChild(btn);
