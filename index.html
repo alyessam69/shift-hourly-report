@@ -3588,5 +3588,112 @@ else start();
   else setTimeout(go,60);
 })();
 </script>
+<script>
+/* ============================================================================
+   FILL  -  write the readings of the hour in one box and press Fill:
+       MC  FA  MC  FA        (the first pair is the Reactor, the second the Plodder)
+   The moisture says which is which: 21-27 is the Reactor, 11-17 is the Plodder.
+   The first FA goes to the Reactor, the second FA to the Plodder.
+       25  0.06  15  0.1   ->  Reactor 25 / 0.06   ·   Plodder 15 / 0.1
+   The box sits next to the tick of the hour, so every hour has its own.
+   ============================================================================ */
+(function(){
+  var KEY='shiftrep_fillbox_v1';
+  function boxValues(){
+    try{return JSON.parse(sget(KEY)||'{}')}catch(e){return {}}
+  }
+  function saveBox(h,v){
+    try{var o=boxValues();o[h]=v;sset(KEY,JSON.stringify(o))}catch(e){}
+  }
+  /* the numbers of the box */
+  function nums(text){
+    var out=[];
+    String(text||'').split(/[\s,;]+/).forEach(function(p){
+      if(p==='')return;var n=parseFloat(p);
+      if(!isNaN(n))out.push(n);
+    });
+    return out;
+  }
+  /* which number belongs to whom */
+  function parse(text){
+    var n=nums(text),mc=[],fa=[],r={},p={};
+    n.forEach(function(v){ if(v>10)mc.push(v); else fa.push(v); });
+    var rm=mc.filter(function(v){return v>=21&&v<=27})[0];
+    var pm=mc.filter(function(v){return v>=11&&v<=17})[0];
+    if(rm===undefined)rm=mc[0];              /* the first moisture is the Reactor's */
+    if(pm===undefined)pm=mc[1];
+    if(rm!==undefined)r.mc=rm;
+    if(pm!==undefined)p.mc=pm;
+    if(fa.length>0)r.fa=fa[0];                /* the first FA is the Reactor's */
+    if(fa.length>1)p.fa=fa[1];                /* the second FA is the Plodder's */
+    if(r.mc===undefined&&p.mc===undefined&&r.fa===undefined&&p.fa===undefined)return null;
+    return {r:r,p:p};
+  }
+  function setCell(tb,col,v){
+    if(!tb||!tb.rows||!tb.rows[2])return;
+    var c=tb.rows[2].cells[col];
+    if(!c)return;
+    c.textContent=String(v);
+    c.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function doFill(card,box){
+    var d=parse(box.value);
+    if(!d){toast('\u26a0 Write the numbers like: 25 0.06 15 0.1');return}
+    var tb=card.querySelectorAll('.blk table'),t1=tb[0],t2=tb[1];
+    if(d.r.mc!==undefined)setCell(t1,0,d.r.mc);     /* the Reactor's moisture */
+    if(d.r.fa!==undefined)setCell(t1,2,d.r.fa);     /* the Reactor's FA */
+    if(d.p.mc!==undefined)setCell(t2,0,d.p.mc);     /* the Plodder's moisture */
+    if(d.p.fa!==undefined)setCell(t2,2,d.p.fa);     /* the Plodder's FA */
+    saveAll();                                        /* saves + works out the TFM */
+    toast('\u2705 Filled '+pad(card._h));
+  }
+  function inject(){
+    var cards=document.querySelectorAll('#main .card');
+    for(var i=0;i<cards.length;i++){
+      var c=cards[i];
+      if(c._h==null)continue;
+      if(c.querySelector('.fillbox'))continue;
+      var bar=c.querySelector('.bar');
+      if(!bar)continue;
+      var box=document.createElement('input');
+      box.type='text';box.className='fillbox';
+      box.placeholder='MC FA MC FA';
+      box.inputMode='decimal';
+      box.title='Write the readings: MC FA MC FA - then press Fill';
+      box.setAttribute('aria-label','Readings of this hour');
+      box.style.cssText='width:104px;padding:4px 7px;border:1px solid var(--line);'+
+        'border-radius:8px;font-size:12px;background:var(--bg);color:var(--ink);';
+      box.value=boxValues()[c._h]||'';
+      var btn=document.createElement('button');
+      btn.type='button';btn.className='fillbtn';
+      btn.textContent='Fill';
+      btn.title='Put these numbers in the Reactor and the Plodder tables';
+      btn.style.cssText='padding:5px 11px;border:1px solid var(--acc);background:var(--acc);'+
+        'color:#fff;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;';
+      btn.onclick=(function(card,bx){return function(e){
+        e.preventDefault();e.stopPropagation();
+        saveBox(card._h,bx.value);
+        doFill(card,bx);
+      }})(c,box);
+      box.oninput=(function(card,bx){return function(){saveBox(card._h,bx.value)}})(c,box);
+      var wrap=document.createElement('span');
+      wrap.style.cssText='display:inline-flex;gap:5px;align-items:center;flex:0 0 auto;';
+      wrap.appendChild(box);wrap.appendChild(btn);
+      var lbl=bar.querySelector('label');
+      if(lbl&&lbl.nextSibling)lbl.parentNode.insertBefore(wrap,lbl.nextSibling);
+      else bar.appendChild(wrap);
+    }
+  }
+  function start(){
+    inject();
+    var main=document.getElementById('main');
+    if(main&&window.MutationObserver){
+      new MutationObserver(function(){inject()}).observe(main,{childList:true,subtree:true});
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);
+  else setTimeout(start,80);
+})();
+</script>
 </body>
 </html>
