@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
+<script>/* the browser can fire the install event before the body script runs
+   (the manifest is in <head> and the service worker is already active),
+   so we catch it here and keep it for the button below. */
+window.__installPrompt=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__installPrompt=e;});</script>
 <meta name="theme-color" content="#2d4f70">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2136,17 +2140,31 @@ if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.add
 (function(){
  var btn=document.getElementById('install'),deferred=null;
  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ var standalone=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone===true;
+ function hint(){
+  var ua=navigator.userAgent;
+  if(/Edg\//.test(ua))return 'Edge: the install icon at the right of the address bar, or Menu > Apps > Install this site as an app';
+  if(/Firefox\//.test(ua))return 'Firefox cannot install web apps - open the same link in Chrome or Edge';
+  if(/Safari/.test(ua)&&!/Chrome/.test(ua))return 'Safari (Mac): File > Add to Dock';
+  if(/Chrome\//.test(ua))return 'Chrome: the install icon at the right of the address bar, or Menu > Cast, save and share > Install page as app';
+  return 'Use the browser menu > Install app / Add to Home screen';
+ }
  window.addEventListener('beforeinstallprompt',function(e){
   e.preventDefault();deferred=e;if(btn)btn.hidden=false;
  });
  if(isIOS&&btn)btn.hidden=false;
+ /* the event can arrive before this script runs -> the early listener in <head> kept it */
+ if(window.__installPrompt){deferred=window.__installPrompt;if(btn)btn.hidden=false;}
+ /* desktop: the event does not always come (Firefox, already installed, or
+    dismissed earlier) -> keep the button visible so it can still be installed */
+ if(!isIOS&&!standalone&&btn&&!deferred)btn.hidden=false;
  if(btn)btn.addEventListener('click',function(){
   if(deferred){
    deferred.prompt();
-   deferred.userChoice.then(function(){deferred=null;if(btn)btn.hidden=true;},function(){deferred=null;});
+   deferred.userChoice.then(function(res){deferred=null;if(res&&res.outcome==='accepted'&&btn)btn.hidden=true;},function(){deferred=null;});
    return;
   }
-  toast('Browser menu > Add to Home screen');
+  toast(isIOS?'Browser menu > Add to Home screen':hint());
  });
 })();
 </script>
