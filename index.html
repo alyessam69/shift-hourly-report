@@ -2713,34 +2713,20 @@ else start();
 })();
 /* ============================================================================
    THE REACTOR  ->  "In Process Report of Soap Noodles"
-   One sheet per day, named  "PKOL(85-15) 9-11-2026"  (product + day).
-   Every sheet holds the whole day (01:00 -> 23:00) and each shift fills its
-   own hours:
-     * Shift C (01:00-07:00) starts the day -> if the sheet of that day is not
-       there yet, it is CREATED: a copy of the last day's sheet (same shapes,
-       colours, borders and column widths) with the new date, holding the
-       hours 01:00-15:00; only the C hours get the real numbers.
-     * Shift A (09:00-15:00) and Shift B (17:00-23:00) fill their own rows of
-       the sheet of that day (rows that are not there yet are added).
+   NO new sheet is ever created - not by shift C and not by any other shift.
+   The rows go straight into the sheet that is already in the workbook, the
+   same way the Daily Noodles analysis does it:
+     * the candidates are the two PKOL sheets of the factory workbook
+       ("PKOL(85-15) ..." and "PKOL(90-10) ...") - "Sheet1" is never used.
+     * the winner is the one with the NEWEST DATA inside it (the newest date
+       in column B) - the same rule as the Noodles analysis.
+     * the hours of the shift are written under the last row that has data
+       (a row of the same date and the same hour is written again, not
+       duplicated).
    ============================================================================ */
 var ipBook=null, ipHandle=null, ipName='', ipFresh=false;
 
 /* the sheet name carries the day: "PKOL(85-15) 9-11-2026" */
-function ipDateFromName(name){
-  var m=String(name==null?'':name).match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
-  if(!m)return null;
-  return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);   /* -> iso */
-}
-function ipPrefixFromName(name){
-  var m=String(name==null?'':name).match(/^\s*(.*?)\s*\d{1,2}-\d{1,2}-\d{4}/);
-  return m? m[1].trim():'';
-}
-function ipDaySheets(book){
-  var out=[];
-  (book.worksheets||[]).forEach(function(ws){var d=ipDateFromName(ws.name); if(d)out.push({ws:ws,iso:d});});
-  out.sort(function(a,b){return a.iso<b.iso?-1:a.iso>b.iso?1:0});
-  return out;
-}
 /* the hour of a row (the Time column) */
 function ipHourOf(ws,r){
   var v=ws.getCell(r,3).value;
@@ -2755,12 +2741,6 @@ function ipDMY(iso){
   var p=String(iso||curISO()).split('-');
   return ('0'+p[2]).slice(-2)+'/'+('0'+p[1]).slice(-2)+'/'+p[0];
 }
-function ipNewSheetName(book,iso){
-  var days=ipDaySheets(book);
-  var prefix=days.length? ipPrefixFromName(days[days.length-1].ws.name):'PKOL(85-15)';
-  var p=String(iso).split('-');
-  return prefix+' '+(+p[2])+'-'+(+p[1])+'-'+p[0];
-}
 /* copy one row with its format */
 function ipCopyRow(src,dst,r,nr){
   var s=src.getRow(r), d=dst.getRow(nr);
@@ -2774,105 +2754,83 @@ function ipCopyRow(src,dst,r,nr){
 /* a new sheet = the template of the last day: the header only. The data rows are
    added by ipWriteHours - and ONLY for the hours that are really registered (the
    very same rows the Excel export writes). No N/A rows for the missing hours. */
-function ipNewSheet(book,src,name,iso){
-  var ws=book.addWorksheet(name);
-  for(var c=1;c<=src.columnCount;c++){var col=src.getColumn(c); if(col.width) ws.getColumn(c).width=col.width;}
-  var HR=9, last=HR;                       /* rows 1-9 are the report header */
-  for(var r=1;r<=HR;r++) ipCopyRow(src,ws,r,r);
-  /* the format of a factory data row - the donor for the rows we add later.
-     It comes from the CLEAN template (the most common format of the rows),
-     never from one single row that could be broken. */
-  var donor={}, donorH=null;
-  var srcTmpl=ipRowTemplate(src);
-  for(var dc0=2;dc0<=17;dc0++){
-    var t0=srcTmpl.cols[dc0];
-    if(t0)donor[dc0]={numFmt:t0.numFmt,font:t0.font,alignment:t0.alignment,fill:t0.fill,border:t0.border};
-  }
-  donorH=srcTmpl.height;
-  ws._ipDonor=donor; ws._ipDonorH=donorH;
-  /* the WHOLE day is written: the hours of the three shifts (01:00 -> 23:00),
-     the same rows as the factory sheets - with their format and their thick
-     border between every shift (the last hour of a shift keeps the thick
-     bottom line of the factory sheet). The results stay EMPTY: only the date,
-     the time and the sample point are there - the shift that writes puts its
-     own numbers in its own rows.
-     The sheet starts at the shift that creates it:
-       shift C (01:00) -> the whole day 01:00 -> 23:00
-       shift A (09:00) -> 09:00 -> 23:00 (its own hours + the hours of shift B)
-       shift B (17:00) -> 17:00 -> 23:00 (the day is over) */
-  var fromH=(SH[CUR]&&SH[CUR][0])||1;
-  var hours=[];
-  src.eachRow({includeEmpty:false},function(row,rn){
-    if(rn<=HR)return;
-    var h=ipHourOf(src,rn);
-    if(h==null||h<fromH)return;             /* there is no 00:00 hour at all */
-    hours.push({rn:rn,h:h});
-  });
-  hours.sort(function(a,b){return a.h-b.h});
-  var tmpl=ipRowTemplate(src);      /* the clean format of the factory sheet */
-  var r0=HR;
-  hours.forEach(function(x){
-    r0++;
-    ipCopyRow(src,ws,x.rn,r0);              /* the format + the time come with it */
-    for(var dc=5;dc<=19;dc++) ws.getCell(r0,dc).value=null;   /* no N/A, no numbers */
-    ws.getCell(r0,2).value=ipDMY(iso);
-    /* the rows of the new sheet get the clean format too - a broken format in
-       the sheet we copied from must never come to the new sheet */
-    for(var dc2=2;dc2<=17;dc2++){
-      var cell2=ws.getCell(r0,dc2);
-      cell2.style=ipCellStyle(tmpl.cols[dc2],false,false);
-    }
-    if(tmpl.height) ws.getRow(r0).height=tmpl.height;
-    last=r0;
-  });
-  /* the day starts with a thick line on top (like the factory sheets) */
-  if(last>HR){
-    for(var dc2=2;dc2<=19;dc2++){
-      var top=ws.getCell(HR+1,dc2);
-      var tb=Object.assign({},top.border||{});
-      tb.top={style:'medium',color:{argb:'FF000000'}};
-      top.border=tb;
-    }
-  }
-  /* the merged cells (the title, the header boxes...) */
-  var merges=(src.model&&src.model.merges)||[];
-  merges.forEach(function(m){try{ws.mergeCells(m)}catch(e){}});
-  try{ws.views=[{state:'frozen',xSplit:5,ySplit:HR,topLeftCell:'F'+(HR+1),activeCell:'F'+(HR+1)}];}catch(e){}
-  try{ws.pageSetup=Object.assign({},src.pageSetup);}catch(e){}
-  return {ws:ws,lastRow:last,headerRow:HR,from:fromH,
-          to:hours.length?hours[hours.length-1].h:fromH};
+/* the two PKOL sheets of the factory workbook - "Sheet1" is never used */
+function ipIsProductSheet(name){
+  var s=String(name==null?'':name).toUpperCase().replace(/[\s:]/g,'');
+  return s.indexOf('PKOL')===0;
 }
-/* the target: the sheet of the day, or a brand new one */
+/* the date that is written in the name - only a tiebreak between two sheets
+   that hold the same newest date ("PKOL(85-15) 11-2026" -> 2026-11) */
+function ipNameScore(name){
+  var s=String(name||'');
+  var m=s.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if(m)return (+m[3])*10000+(+m[2])*100+(+m[1]);
+  var m2=s.match(/(\d{1,2})-(\d{4})/);
+  if(m2)return (+m2[2])*10000+(+m2[1])*100;
+  return 0;
+}
+/* the PKOL sheets of the workbook, the one with the newest data first */
+function ipProductSheets(book){
+  var out=[];
+  (book.worksheets||[]).forEach(function(ws){
+    if(!ipIsProductSheet(ws.name))return;
+    out.push({ws:ws,max:xlSheetMaxDate(ws),score:ipNameScore(ws.name)});
+  });
+  out.sort(function(a,b){
+    var am=(a.max==null?-1:a.max), bm=(b.max==null?-1:b.max);
+    if(am!==bm)return bm-am;
+    return b.score-a.score;
+  });
+  return out;
+}
+/* the target: the PKOL sheet with the newest data (the sheet the user picked
+   by hand wins). A new sheet is NEVER made. */
 function ipTarget(book){
   book=book||ipBook;
   if(!book)return null;
-  var iso=curISO();
-  var days=ipDaySheets(book);
-  var hit=null;
-  for(var i=0;i<days.length;i++) if(days[i].iso===iso){hit=days[i];break}
-  if(hit) return {ws:hit.ws,how:'existing',iso:iso,name:hit.ws.name};
-  return {ws:null,how:'new',iso:iso,name:ipNewSheetName(book,iso)};
+  var list=ipProductSheets(book);
+  if(!list.length)return null;
+  var sel=document.getElementById('ipSheet');
+  if(sel&&sel.value){
+    var hit=list.filter(function(x){return x.ws.name===sel.value})[0];
+    if(hit)return {ws:hit.ws,how:'existing',name:hit.ws.name};
+  }
+  return {ws:list[0].ws,how:'existing',name:list[0].ws.name};
+}
+/* today as an Excel serial */
+function ipTodaySerial(){
+  var p=String(curISO()).split('-');
+  return xlSerialDate(+p[2],+p[1],+p[0]);
+}
+/* the key of a data row: the date + the hour (so the same hour of another day
+   is a different row) */
+function ipDataKey(ws,rn,h){
+  var d=xlDateVal(ws.getCell(rn,2).value);
+  if(d==null)return null;
+  return d+'|'+h;
 }
 /* write the hours of the shift into the sheet */
 function ipWriteHours(ws,data,X){
   var tmpl=ipRowTemplate(ws);      /* the clean format of the sheet */
-  var map={},last=0;
+  var map={},first=xlNextRow(ws,2,19);  /* the first free row - under the last row with data */
+  var today=ipTodaySerial();
   ws.eachRow({includeEmpty:false},function(row,rn){
     var h=ipHourOf(ws,rn);
-    if(h!=null&&map[h]==null)map[h]=rn;
-    if(rn>last)last=rn;
+    if(h==null)return;
+    var k=ipDataKey(ws,rn,h);
+    if(k!=null&&map[k]==null)map[k]=rn;
   });
   var done=[];
   data.forEach(function(d){
     var v=vals('r',d,X);
     if(!v)return;
-    var h=+d.h, r=map[h];
-    if(r==null){                     /* that hour is not on the sheet yet -> add it */
-      r=last+1;
+    var h=+d.h, key=today+'|'+h, r=map[key];
+    if(r==null){                     /* that hour of that day is not on the sheet yet -> add it */
+      r=first;
       /* the clean format of the sheet - never a broken row of the file */
       for(var dc=2;dc<=17;dc++) ws.getCell(r,dc).style=ipCellStyle(tmpl.cols[dc],false,false);
       if(tmpl.height)ws.getRow(r).height=tmpl.height;
-      last=r; map[h]=r;
+      first=r+1; map[key]=r;
     }
     for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
       var L=String.fromCharCode(64+c);
@@ -2969,9 +2927,10 @@ function ipCellStyle(t,isTop,isBot){
             top:{style:isTop?'medium':'thin'}, bottom:{style:isBot?'medium':'thin'}}
   };
 }
-/* which shift does this hour belong to? */
+/* which shift does this hour belong to? (00:00 belongs to shift C) */
 function ipBlockOf(h){
   if(h==null)return null;
+  if(h===0)return 'C';
   if(SH.C.indexOf(h)>=0)return 'C';
   if(SH.A.indexOf(h)>=0)return 'A';
   if(SH.B.indexOf(h)>=0)return 'B';
@@ -2993,21 +2952,25 @@ function ipBlockBorders(ws){
     if(rn<=HR)return;
     var h=ipHourOf(ws,rn);
     if(h==null)return;
-    rows.push({rn:rn,h:h});
+    var d=xlDateVal(ws.getCell(rn,2).value);
+    rows.push({rn:rn,h:h,day:(d==null?'':String(d))});
   });
   if(!rows.length)return;
   var firstRow=rows[0].rn, blocks={};
   rows.forEach(function(x){
     var b=ipBlockOf(x.h);
     if(!b)return;
-    if(!blocks[b]||x.h>blocks[b].h)blocks[b]={rn:x.rn,h:x.h};
+    /* every DAY of every shift gets its own thick line (the factory sheet holds
+       many days in the same sheet) */
+    var k=x.day+'|'+b;
+    if(!blocks[k]||x.h>blocks[k].h)blocks[k]={rn:x.rn,h:x.h};
   });
   /* only the thick lines are set - the rest of the border is left as it is
      (that is the format of the factory sheets) */
   for(var r=firstRow;r<=rows[rows.length-1].rn;r++) ipSetSide(ws,r,2,'left','medium');
   for(var dc=2;dc<=19;dc++) ipSetSide(ws,firstRow,dc,'top','medium');
-  Object.keys(blocks).forEach(function(b){
-    var rn=blocks[b].rn;
+  Object.keys(blocks).forEach(function(k){
+    var rn=blocks[k].rn;
     for(var dc2=2;dc2<=19;dc2++) ipSetSide(ws,rn,dc2,'bottom','medium');
   });
 }
@@ -3020,22 +2983,23 @@ function ipFillSelect(){
   var lab=document.getElementById('ipSheetLab'); if(lab)lab.hidden=false;
   var t=ipTarget(ipBook);
   var opts=[];
-  ipDaySheets(ipBook).forEach(function(x){
-    opts.push('<option value="'+x.ws.name.replace(/"/g,'&quot;')+'">'+x.ws.name.replace(/</g,'&lt;')+'</option>');
+  ipProductSheets(ipBook).forEach(function(x){
+    var nm=x.ws.name;
+    opts.push('<option value="'+nm.replace(/"/g,'&quot;')+'">'+nm.replace(/</g,'&lt;')+'</option>');
   });
-  if(t&&t.how==='new') opts.push('<option value="__new__">➕ Create a new sheet: '+t.name.replace(/</g,'&lt;')+'</option>');
   sel.innerHTML=opts.join('');
-  sel.value=t?(t.how==='new'?'__new__':t.name):(opts[0]||'');
+  sel.value=(t&&t.name)?t.name:(opts[0]||'');
 }
 function ipPlan(){
   var el=document.getElementById('ipPlan'); if(!el||!ipBook)return;
   var t=ipTarget(ipBook);
-  var sel=document.getElementById('ipSheet');
-  var manual=(sel&&sel.value==='__new__');
   var n=hourData().length;
-  var nm=manual?ipNewSheetName(ipBook,curISO()):(sel&&sel.value?sel.value:t.name);
-  var kind=manual?'a new sheet':'the sheet of that day';
-  el.innerHTML='<b>📥 '+n+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+kind+
+  if(!t){
+    el.innerHTML='<b>⚠ No PKOL sheet in this workbook</b> · the rows can not be written (Sheet1 is never used)';
+    return;
+  }
+  var nm=t.name;
+  el.innerHTML='<b>📥 '+n+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · the PKOL sheet with the newest data'+
     ' · shift '+CUR+' · the hours '+hourData().map(function(d){return pad(d.h)}).join(',')+' · date '+curDMY();
 }
 async function ipLoad(){
@@ -3106,31 +3070,14 @@ async function ipWrite(){
     var now=new Date();
     book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
     book.modified=now;
-    /* which sheet? */
-    var sel=document.getElementById('ipSheet');
-    var makeNew=(sel&&sel.value==='__new__');
-    var ws=null,how='',name='',range=null;
-    if(!makeNew){
-      var t=ipTarget(book);
-      if(t&&t.ws){ws=t.ws;how='existing';name=ws.name}
-      else if(sel&&sel.value){         /* the sheet the user picked by hand */
-        var mv=book.getWorksheet(sel.value);
-        if(mv){ws=mv;how='existing';name=mv.name}
-      }
-      if(!ws){
-        /* the sheet of that day is not there yet -> create it */
-        var days=ipDaySheets(book);
-        if(!days.length){ipStatus('⚠ No day sheet was found in this workbook.',true);return}
-        var src=days[days.length-1].ws;
-        var made=ipNewSheet(book,src,ipNewSheetName(book,curISO()),curISO());
-        ws=made.ws;how='created';name=ws.name;range=made;
-      }
-    } else {
-      var days2=ipDaySheets(book);
-      if(!days2.length){ipStatus('⚠ No day sheet was found to copy.',true);return}
-      var src2=days2[days2.length-1].ws;
-      var made2=ipNewSheet(book,src2,ipNewSheetName(book,curISO()),curISO());
-      ws=made2.ws;how='created';name=ws.name;range=made2;
+    /* which sheet? The PKOL sheet with the newest data - or the one the user
+       picked by hand. A new sheet is NEVER created. */
+    var t=ipTarget(book);
+    var ws=null,name='';
+    if(t&&t.ws){ws=t.ws;name=ws.name}
+    if(!ws){
+      ipStatus('⚠ No PKOL sheet was found in this workbook (Sheet1 is never used).',true);
+      return;
     }
     var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
     var res=ipWriteHours(ws,data,X);
@@ -3148,7 +3095,7 @@ async function ipWrite(){
     }
     ipFillSelect(); ipPlan();
     ipStatus((ipHandle?'✅ ':'⬇️ ')+res.rows.length+' hour(s) ('+res.hours+') written to '+name+
-      (how==='created'?(' — the sheet was created with the hours of the day ('+('0'+range.from).slice(-2)+':00 → '+('0'+range.to).slice(-2)+':00)'):' — the sheet of that day')+
+      ' — the PKOL sheet with the newest data (no sheet was created)'+
       (ipHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     ipStatus('ERROR: '+e.message,true);
