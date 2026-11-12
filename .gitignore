@@ -1,2 +1,6 @@
 test_*.xlsx
 *.tmp
+test_*.xlsx
+t_*.xlsx
+_tmp_*.xlsx
+ip_*.xlsx
