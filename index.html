@@ -3250,10 +3250,33 @@ function swBagNo(key,fallback){
   var n=parseInt(String(key==null?'':key).replace(/[^0-9]/g,''),10);
   return isNaN(n)?(fallback-2):n;
 }
-function swWriteRows(ws,X){
-  var reg=registeredRows(hourData());
-  var sw=swingRows(reg,X);
-  var map={},last=2,firstBag=0;
+/* a row that a shift has filled: a result (Moisture / FA / Color / ...) or the
+   shift letter in the last column. The rows of the numbering that have no
+   result yet are NOT filled - they are the room of the next shift. */
+function swRowFilled(row){
+  var hit=false;
+  row.eachCell({includeEmpty:false},function(cell,cn){
+    if(hit||cn<4||cn>11)return;
+    var v=cell.value;
+    if(v===null||v===undefined)return;
+    if(String(v).trim()!=='')hit=true;
+  });
+  return hit;
+}
+/* the shift letter of a row (the last column) */
+function swRowShift(row){
+  var k='';
+  row.eachCell({includeEmpty:false},function(cell,cn){
+    if(cn!==11)return;
+    var v=cell.value;
+    k=(v==null?'':String(v)).trim();
+  });
+  return k;
+}
+/* what is already in the sheet: the numbering, the rows of this shift and the
+   end of the block of the earlier shifts */
+function swScanSheet(ws){
+  var map={},last=2,firstBag=0,mine=[],prevEnd=0,prevBag=0;
   ws.eachRow({includeEmpty:false},function(row,rn){
     if(rn<=2)return;
     var b=row.getCell(2).value;
@@ -3261,12 +3284,23 @@ function swWriteRows(ws,X){
     if(b&&map[b]==null)map[b]=rn;
     if(b){var bn=swBagNo(b,0); if(bn&&(!firstBag||bn<firstBag))firstBag=bn;}
     if(rn>last)last=rn;
+    /* the rows of this shift (they are written again in their own place when
+       the same shift is written twice - never a second copy) */
+    if(CUR&&swRowShift(row)===CUR){mine.push({rn:rn,key:b,no:swBagNo(b,0)});return}
+    /* the last row of the earlier shifts: the end of their block */
+    if(swRowFilled(row)){prevEnd=rn;prevBag=swBagNo(b,0)}
   });
+  return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag};
+}
+function swWriteRows(ws,X){
+  var reg=registeredRows(hourData());
+  var sw=swingRows(reg,X);
+  var sc=swScanSheet(ws);
+  var map=sc.map,last=sc.last,firstBag=sc.firstBag,mine=sc.mine,prevEnd=sc.prevEnd,prevBag=sc.prevBag;
   /* the day is written up to B200. The rows that have no result yet keep only
      the numbering, the bag and the date - the shift that has the results
-     fills its own rows (the bag numbers are absolute: A = B1.., B = B61..).
-     A sheet that does not exist yet starts at the first bag of the shift that
-     creates it: A -> B1 (the whole day), B -> B61, C -> B121. */
+     fills its own rows. A sheet that does not exist yet starts at the first
+     bag of the shift that creates it: A -> B1 (the whole day), B -> B61. */
   if(!firstBag)firstBag=swBounds(CUR).st;
   for(var n=firstBag;n<=SW_MAXBAG;n++){
     var bkey='B'+n;
@@ -3275,16 +3309,38 @@ function swWriteRows(ws,X){
       swBlankRow(ws,brn,bkey);
     }
   }
-  /* where does every bag go? */
-  var plan=[];
-  sw.rows.forEach(function(r){
-    var key=String(r.v.B||'').trim();
-    if(!key)return;
-    var rn=map[key];
-    if(rn==null){rn=last+1;map[key]=rn;last=rn}
-    plan.push({key:key,rn:rn,r:r});
-  });
-  if(!plan.length)return {rows:0,keys:[]};
+  /* where does every bag go?
+     - this shift is already in the sheet: the same rows again
+     - the earlier shifts are in the sheet: the rows of this shift start right
+       after the last row that has a result and the bag numbers carry on
+       (the last one of shift A is B38 -> this shift starts at B39) until B200
+     - the sheet has no result yet: the rows keep their own place */
+  var plan=[],startBag=swBounds(CUR).st,dropped=0;
+  if(mine.length){
+    var lastMine=mine[mine.length-1];
+    sw.rows.forEach(function(r,i){
+      var rn,key;
+      if(i<mine.length){rn=mine[i].rn;key=mine[i].key||('B'+(lastMine.no+i-mine.length+1))}
+      else{rn=lastMine.rn+1+(i-mine.length);key='B'+(lastMine.no+1+(i-mine.length))}
+      plan.push({key:key,rn:rn,r:r});
+    });
+  }else if(prevEnd>0){
+    startBag=(prevBag>0?prevBag+1:swBounds(CUR).st);
+    sw.rows.forEach(function(r,i){
+      var bno=startBag+i;
+      if(bno>SW_MAXBAG){dropped++;return}        /* the day ends at B200 */
+      plan.push({key:'B'+bno,rn:prevEnd+1+i,r:r});
+    });
+  }else{
+    sw.rows.forEach(function(r,i){
+      var key=String(r.v.B||'').trim();
+      if(!key)return;
+      var rn=map[key];
+      if(rn==null){rn=3+i;map[key]=rn;last=Math.max(last,rn)}
+      plan.push({key:key,rn:rn,r:r});
+    });
+  }
+  if(!plan.length)return {rows:0,keys:[],dropped:dropped};
   var firstRow=plan[0].rn, lastRow=plan[plan.length-1].rn;
   /* the row above the block is only a separator now -> thin */
   if(firstRow>3){
@@ -3308,6 +3364,7 @@ function swWriteRows(ws,X){
     SCOLS.forEach(function(c,i){
       var cell=ws.getCell(rn,i+2);
       var val=r.v[c.k];
+      if(c.k==='B')val=p.key;                 /* the bag of the row follows the sheet */
       if(c.k==='C')val=dtxt(curISO(),'dmy');
       if(val===undefined||val===null||val==='')cell.value=null;
       else if(typeof val==='number')cell.value=val;
@@ -3327,7 +3384,8 @@ function swWriteRows(ws,X){
     }
   }
   return {rows:plan.length,keys:plan.map(function(p){return p.key}),
-          from:firstBag,to:SW_MAXBAG};
+          from:firstBag,to:SW_MAXBAG,dropped:dropped,
+          bags:plan[0].key+'..'+plan[plan.length-1].key};
 }
 function swFillSelect(){
   var sel=document.getElementById('swSheet'); if(!sel||!swBook)return;
@@ -3351,11 +3409,17 @@ function swPlan(){
   var makeNew=(sel&&sel.value==='__new__');
   var nm=makeNew?swNewName():((sel&&sel.value)?sel.value:(t?t.name:swNewName()));
   var br=swBounds(CUR);
-  /* in shift B/C the sheet of the day can only be filled - it is created in A */
   var blocked=(CUR!=='A'&&!t&&(makeNew||!(sel&&sel.value)));
+  /* where do the rows of this shift go? the sheet of the day tells us */
+  var where='the bags B'+br.st+'→B'+br.en,wsNow=t;
+  if(wsNow){
+    var sc=swScanSheet(wsNow);
+    if(sc.mine.length)where='the rows of shift '+CUR+' again (the same rows)';
+    else if(sc.prevEnd>0)where='right after the last row with a result (B'+(sc.prevBag+1)+'→B'+(sc.prevBag+br.tons)+')';
+  }
   el.innerHTML='<b>📥 '+br.tons+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+
     (blocked?'⚠ the sheet of this day is created in shift A':(makeNew?'a new sheet':'the sheet of that day'))+
-    ' · shift '+CUR+' · the bags B'+br.st+'→B'+br.en+' · date '+dtxt(curISO(),'dmy');
+    ' · shift '+CUR+' · '+where+' · date '+dtxt(curISO(),'dmy');
 }
 async function swLoad(){
   try{
@@ -3462,7 +3526,9 @@ async function swWrite(){
     swBook=book;                         /* keep the in-memory book in step with the file */
     swFillSelect(); swPlan();
     swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
+      (res.bags?' ('+res.bags+')':'')+
       (how==='created'?(' — the sheet was created with the bags of the day (B'+res.from+'..B'+res.to+')'):' — the sheet of that day')+
+      (res.dropped?(' ⚠ the day ends at B200 — '+res.dropped+' bag(s) did not fit'):'')+
       (swHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     swStatus('ERROR: '+e.message,true);

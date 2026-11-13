@@ -74,6 +74,10 @@ The Swing rows go into the sheet `Swing Noodles <d>-<m>-<yyyy>` of the same work
    The numbering on the left is the number of the bag.
 3. The shift that writes fills **its own** bags; the rows of the other shifts keep only the
    numbering, the bag and the date.
+4. **The rows of a shift start right after the last row that has a result** (a reading of
+   Moisture / FA / Color) and the bag numbers **carry on** — if shift A ended at **B38**, shift B
+   starts at **B39**. The day ends at **B200**.
+5. Writing the same shift again writes **the same rows** — never a second copy.
 
 ## The rows always look like the factory ones
 
