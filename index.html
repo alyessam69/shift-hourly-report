@@ -1553,9 +1553,15 @@ function olFix(h){
  h=h.replace(/<\/table>/g,'</table><p style="margin:0;padding:0;line-height:12px;font-size:10px">&nbsp;</p>');
  return h;
 }
-function copyOut(html,txt,btn){
- function done(){btn.textContent='Copied \u2713';btn.classList.add('ok');toast('Copied \u2013 paste in Outlook');setTimeout(function(){btn.textContent='Copy';btn.classList.remove('ok')},1800)}
+function copyOut(html,txt,btn,plain){
+ function done(){btn.textContent='Copied \u2713';btn.classList.add('ok');toast(plain?'Copied \u2013 paste in Excel (values only)':'Copied \u2013 paste in Outlook');setTimeout(function(){btn.textContent='Copy';btn.classList.remove('ok')},1800)}
  function fb(){
+  if(plain){                                   /* text only: Excel keeps the format of the sheet */
+   var ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;left:0;top:0;opacity:0';
+   document.body.appendChild(ta);ta.select();
+   try{document.execCommand('copy');done()}catch(e){toast('Copy failed')}
+   document.body.removeChild(ta);return;
+  }
   var d=document.createElement('div');d.innerHTML=html;d.style.cssText='position:fixed;left:0;top:0;opacity:0';
   document.body.appendChild(d);var r=document.createRange();r.selectNodeContents(d);
   var s=window.getSelection();s.removeAllRanges();s.addRange(r);
@@ -1564,7 +1570,9 @@ function copyOut(html,txt,btn){
  }
  try{
   if(navigator.clipboard&&window.ClipboardItem){
-   navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([txt],{type:'text/plain'})})]).then(done,fb);
+   var items=plain?{'text/plain':new Blob([txt],{type:'text/plain'})}
+                    :{'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([txt],{type:'text/plain'})};
+   navigator.clipboard.write([new ClipboardItem(items)]).then(done,fb);
   }else fb();
  }catch(e){fb()}
 }
@@ -1955,9 +1963,10 @@ function buildSummary(m){
 }
 function copySum(id,btn){
  var t=document.querySelector(id==='S'?'#tS table.swdata':'#t'+id+' table');if(!t)return;
- var c=t.cloneNode(true);
- [].forEach.call(c.querySelectorAll('td'),function(x){['contenteditable','class','data-t','data-h','data-k','data-auto','data-red'].forEach(function(a){x.removeAttribute(a)})});
- copyOut(c.outerHTML,document.getElementById('sum')._tsv[id.toLowerCase()],btn);
+ /* these rows go into the factory sheets (Reactor 72% / Plodder / Swing Noodles):
+    copy the VALUES only, so Excel keeps the format of the sheet we paste into
+    instead of taking the colours and borders of this page. */
+ copyOut('',document.getElementById('sum')._tsv[id.toLowerCase()],btn,true);
 }
 
 /* ---------- Export to Excel (real .xlsx, no library) ---------- */
