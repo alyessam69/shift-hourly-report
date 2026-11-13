@@ -2751,7 +2751,7 @@ else start();
        (a row of the same date and the same hour is written again, not
        duplicated).
    ============================================================================ */
-var ipBook=null, ipHandle=null, ipName='', ipFresh=false;
+var ipBook=null, ipHandle=null, ipName='', ipFresh=false, ipRaw=null;
 
 /* the sheet name carries the day: "PKOL(85-15) 9-11-2026" */
 /* the hour of a row (the Time column) */
@@ -2836,6 +2836,242 @@ function ipDataKey(ws,rn,h){
   if(d==null)return null;
   return d+'|'+h;
 }
+/* ===================================================================
+   writing into the file WITHOUT touching its format
+   -------------------------------------------------------------------
+   ExcelJS saves the whole workbook again when it writes: the print
+   settings of every sheet, the thick lines between the shifts and the
+   format of the rows we never touched are all lost - that is what
+   "breaks the Excel".  So we do NOT save with ExcelJS here: we open the
+   file as a zip, put ONLY our rows into the sheet we write into and put
+   every other part back exactly as it was.
+   =================================================================== */
+function ipXmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+async function ipInflate(b){
+  var ds=new DecompressionStream('deflate-raw');
+  var ab=await new Response(new Blob([b]).stream().pipeThrough(ds)).arrayBuffer();
+  return new Uint8Array(ab);
+}
+async function ipDeflate(b){
+  try{
+    var cs=new CompressionStream('deflate-raw');
+    var ab=await new Response(new Blob([b]).stream().pipeThrough(cs)).arrayBuffer();
+    return new Uint8Array(ab);
+  }catch(e){return null}
+}
+async function ipZipOpen(bytes){
+  var dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),eo=-1,i;
+  for(i=bytes.length-22;i>=0&&i>bytes.length-22-65535;i--){if(dv.getUint32(i,true)===0x06054b50){eo=i;break}}
+  if(eo<0)throw new Error('this file is not an xlsx (zip) file');
+  var cnt=dv.getUint16(eo+10,true),p=dv.getUint32(eo+16,true),dec=new TextDecoder();
+  var order=[],data={};
+  for(i=0;i<cnt;i++){
+    if(dv.getUint32(p,true)!==0x02014b50)break;
+    var method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true);
+    var nlen=dv.getUint16(p+28,true),elen=dv.getUint16(p+30,true),clen=dv.getUint16(p+32,true);
+    var lho=dv.getUint32(p+42,true),name=dec.decode(bytes.subarray(p+46,p+46+nlen));
+    var lnlen=dv.getUint16(lho+26,true),lelen=dv.getUint16(lho+28,true);
+    var start=lho+30+lnlen+lelen,raw=bytes.subarray(start,start+csize);
+    order.push(name);
+    data[name]=method===0?new Uint8Array(raw):await ipInflate(raw);
+    p+=46+nlen+elen+clen;
+  }
+  return {order:order,data:data};
+}
+async function ipZipClose(z){
+  var enc=new TextEncoder(),parts=[],cd=[],off=0,i;
+  for(i=0;i<z.order.length;i++){
+    var name=z.order[i],raw=z.data[name],nb=enc.encode(name),crc=crc32(raw);
+    var comp=await ipDeflate(raw),method=8;
+    if(!comp||comp.length>=raw.length){comp=raw;method=0}
+    var lh=new DataView(new ArrayBuffer(30+nb.length));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,8,true);
+    lh.setUint16(8,method,true);lh.setUint16(10,0,true);lh.setUint16(12,0,true);
+    lh.setUint32(14,crc,true);lh.setUint32(18,comp.length,true);lh.setUint32(22,raw.length,true);
+    lh.setUint16(26,nb.length,true);lh.setUint16(28,0,true);
+    var lhb=new Uint8Array(lh.buffer);lhb.set(nb,30);
+    var ch=new DataView(new ArrayBuffer(46+nb.length));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,8,true);
+    ch.setUint16(10,method,true);ch.setUint16(12,0,true);ch.setUint16(14,0,true);
+    ch.setUint32(16,crc,true);ch.setUint32(20,comp.length,true);ch.setUint32(24,raw.length,true);
+    ch.setUint16(28,nb.length,true);ch.setUint16(30,0,true);ch.setUint16(32,0,true);ch.setUint16(34,0,true);
+    ch.setUint16(36,0,true);ch.setUint32(38,0,true);ch.setUint32(42,off,true);
+    var chb=new Uint8Array(ch.buffer);chb.set(nb,46);
+    parts.push(lhb);parts.push(comp);cd.push(chb);
+    off+=lhb.length+comp.length;
+  }
+  var cl=0;for(i=0;i<cd.length;i++)cl+=cd[i].length;
+  var e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,cd.length,true);e.setUint16(10,cd.length,true);
+  e.setUint32(12,cl,true);e.setUint32(16,off,true);
+  var out=new Uint8Array(off+cl+22),o=0;
+  for(i=0;i<parts.length;i++){out.set(parts[i],o);o+=parts[i].length}
+  for(i=0;i<cd.length;i++){out.set(cd[i],o);o+=cd[i].length}
+  out.set(new Uint8Array(e.buffer),o);
+  return out;
+}
+/* which xml part is the sheet with that name? */
+function ipSheetPath(z,name){
+  var dec=new TextDecoder();
+  var wb=dec.decode(z.data['xl/workbook.xml']||new Uint8Array(0));
+  var rels=dec.decode(z.data['xl/_rels/workbook.xml.rels']||new Uint8Array(0));
+  var want='name="'+ipXmlEsc(name)+'"';
+  var tags=wb.match(/<sheet\b[^>]*>/g)||[],tag=null,i;
+  for(i=0;i<tags.length;i++)if(tags[i].indexOf(want)>=0){tag=tags[i];break}
+  if(!tag)return null;
+  var rid=(/r:id="([^"]+)"/.exec(tag)||[])[1];
+  if(!rid)return null;
+  var m=new RegExp('<Relationship[^>]*Id="'+rid+'"[^>]*Target="([^"]+)"').exec(rels);
+  if(!m)return null;
+  var t=m[1].replace(/^\//,'');
+  return t.indexOf('xl/')===0?t:'xl/'+t;
+}
+/* the cells of a row: {B:{s:'134',xml:'...'},...} */
+function ipRowCells(body){
+  var out={},re=/<c\b([^>]*?)\/>|<c\b([^>]*?)>([\s\S]*?)<\/c>/g,m;
+  while((m=re.exec(body))!==null){
+    var at=m[1]!==undefined?m[1]:m[2];
+    var ref=/r="([A-Z]+)(\d+)"/.exec(at);
+    if(!ref)continue;
+    out[ref[1]]={s:(/s="(\d+)"/.exec(at)||[])[1]||'',
+                 t:(/t="([^"]+)"/.exec(at)||[])[1]||'',
+                 inner:m[3]===undefined?'':m[3],xml:m[0]};
+  }
+  return out;
+}
+function ipFindRow(xml,r){
+  var m=new RegExp('<row\\b[^>]*\\br="'+r+'"[^>]*>').exec(xml);
+  if(!m)return null;
+  var tag=m[0],start=m.index,body='',end=start+tag.length;
+  if(!/\/>\s*$/.test(tag)){
+    var c=xml.indexOf('</row>',end);
+    if(c<0)return null;
+    body=xml.slice(end,c);end=c+6;
+  }
+  return {tag:tag,body:body,cells:ipRowCells(body),start:start,end:end};
+}
+/* the row tag of a new row: the format of the factory row (height, spans...)
+   and the thick bottom of the shift - exactly the way the factory does it */
+function ipRowAttrs(tag,r,thick){
+  var want=['spans','ht','customHeight','s','customFormat','thickTop','hidden','outlineLevel','collapsed'];
+  var out='',i,mm;
+  for(i=0;i<want.length;i++){
+    mm=new RegExp('\\s'+want[i]+'="([^"]*)"').exec(tag);
+    if(mm)out+=' '+want[i]+'="'+mm[1]+'"';
+  }
+  if(thick)out+=' thickBot="1"';
+  return '<row r="'+r+'"'+out+'>';
+}
+function ipCellXml(col,r,s,val){
+  var ref=col+r;
+  if(val===null||val===undefined||val==='')return '<c r="'+ref+'" s="'+s+'"/>';
+  if(typeof val==='number'&&isFinite(val))return '<c r="'+ref+'" s="'+s+'"><v>'+val+'</v></c>';
+  return '<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t>'+ipXmlEsc(val)+'</t></is></c>';
+}
+/* the red of the factory (the same border + the red font). If the file has no
+   red twin of that cell, we add one - the format of the file itself never
+   changes, we only add the red we need. */
+function ipRedStyle(z,baseS){
+  var key='xl/styles.xml';
+  var xml=new TextDecoder().decode(z.data[key]||new Uint8Array(0));
+  var fm=/<fonts([^>]*)>([\s\S]*?)<\/fonts>/.exec(xml);
+  var xm=/<cellXfs([^>]*)>([\s\S]*?)<\/cellXfs>/.exec(xml);
+  if(!fm||!xm)return null;
+  var fonts=fm[2].match(/<font\b[^>]*>[\s\S]*?<\/font>|<font\b[^>]*\/>/g)||[];
+  var xfs=xm[2].match(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g)||[];
+  var base=xfs[baseS];
+  if(!base)return null;
+  var at=function(x,re,d){var mm=re.exec(x);return mm?mm[1]:d};
+  var bBorder=at(base,/borderId="(\d+)"/,'0'), bNum=at(base,/numFmtId="(\d+)"/,'0');
+  var bFill=at(base,/fillId="(\d+)"/,'0'), bFont=at(base,/fontId="(\d+)"/,'0');
+  var bAl=(/<alignment[^>]*\/>/.exec(base)||[''])[0];
+  var redFont=-1,i;
+  for(i=0;i<fonts.length;i++)if(/FFFF0000/i.test(fonts[i])){redFont=i;break}
+  if(redFont>=0){                       /* is there a red twin of that cell? */
+    for(i=0;i<xfs.length;i++){
+      var x=xfs[i];
+      if(+at(x,/fontId="(\d+)"/,'0')!==redFont)continue;
+      if(at(x,/borderId="(\d+)"/,'0')===bBorder&&at(x,/numFmtId="(\d+)"/,'0')===bNum&&
+         at(x,/fillId="(\d+)"/,'0')===bFill&&((/<alignment[^>]*\/>/.exec(x)||[''])[0])===bAl)return i;
+    }
+  }
+  var font=fonts[+bFont];
+  if(!font)return null;
+  var newFont=font.replace(/<color[^>]*\/>/,'');
+  if(/<name\b/.test(newFont))newFont=newFont.replace(/<name\b/,'<color rgb="FFFF0000"/><name');
+  else newFont=newFont.replace(/<\/font>/,'<color rgb="FFFF0000"/></font>');
+  var newFontId=fonts.length;
+  var newXfs=base.replace(/fontId="\d+"/,'fontId="'+newFontId+'"');
+  if(/applyFont="/.test(newXfs))newXfs=newXfs.replace(/applyFont="[^"]*"/,'applyFont="1"');
+  else newXfs=newXfs.replace(/^<xf /,'<xf applyFont="1" ');
+  var newXfId=xfs.length;
+  var nf=fm[1].replace(/count="\d+"/,'count="'+(fonts.length+1)+'"');
+  var nx=xm[1].replace(/count="\d+"/,'count="'+(xfs.length+1)+'"');
+  var out=xml.replace(fm[0],function(){return '<fonts'+nf+'>'+fm[2]+newFont+'</fonts>'})
+               .replace(xm[0],function(){return '<cellXfs'+nx+'>'+xm[2]+newXfs+'</cellXfs>'});
+  z.data[key]=new TextEncoder().encode(out);
+  return newXfId;
+}
+function ipInsertRow(xml,rowXml,r){
+  var sd=xml.indexOf('<sheetData');
+  if(sd<0)throw new Error('the sheet has no rows');
+  var dataStart=xml.indexOf('>',sd)+1,dataEnd=xml.indexOf('</sheetData>',dataStart);
+  if(dataEnd<0)throw new Error('the sheet is broken');
+  var inner=xml.slice(dataStart,dataEnd);
+  var re=/<row\b[^>]*\br="(\d+)"/g,m,last=null;
+  while((m=re.exec(inner))!==null){if(+m[1]<r)last=m}
+  var at=0;
+  if(last){
+    var tagEnd=inner.indexOf('>',last.index)+1;
+    at=(/\/>\s*$/.test(inner.slice(last.index,tagEnd)))?tagEnd:(inner.indexOf('</row>',tagEnd)+6);
+  }
+  return xml.slice(0,dataStart)+inner.slice(0,at)+rowXml+inner.slice(at)+xml.slice(dataEnd);
+}
+/* the heart of it: only our rows go into the sheet - the rest of the file is
+   put back untouched */
+async function ipSurgicalWrite(raw,sheetName,writes,refRow){
+  var z=await ipZipOpen(raw);
+  var path=ipSheetPath(z,sheetName);
+  if(!path)throw new Error('the sheet "'+sheetName+'" was not found inside the file');
+  var xml=new TextDecoder().decode(z.data[path]);
+  var ref=ipFindRow(xml,refRow);
+  if(!ref)throw new Error('the reference row of the sheet was not found');
+  var refCols=Object.keys(ref.cells);
+  var byRow={},k;
+  for(k=0;k<writes.length;k++){
+    var w=writes[k];
+    if(!byRow[w.row])byRow[w.row]={row:w.row,vals:{},red:{},thick:0};
+    var vk=Object.keys(w.vals||{}),vk2,rk2;
+    for(vk2=0;vk2<vk.length;vk2++)byRow[w.row].vals[vk[vk2]]=w.vals[vk[vk2]];
+    rk2=Object.keys(w.red||{});
+    for(vk2=0;vk2<rk2.length;vk2++){if(w.red[rk2[vk2]])byRow[w.row].red[rk2[vk2]]=1}
+    if(w.thick)byRow[w.row].thick=1;
+  }
+  var rows=Object.keys(byRow);
+  for(k=0;k<rows.length;k++){
+    var r=+rows[k],bw=byRow[rows[k]],cells=[],ci;
+    for(ci=0;ci<refCols.length;ci++){
+      var col=refCols[ci],rc=ref.cells[col],s=rc.s;
+      if(Object.prototype.hasOwnProperty.call(bw.vals,col)){
+        if(bw.red[col]){var rs=ipRedStyle(z,+s);if(rs!==null&&rs!==undefined)s=String(rs)}
+        cells.push(ipCellXml(col,r,s,bw.vals[col]));
+      }else{
+        cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
+      }
+    }
+    var extra=Object.keys(bw.vals);
+    for(ci=0;ci<extra.length;ci++){
+      var c2=extra[ci];
+      if(!ref.cells[c2])cells.push(ipCellXml(c2,r,'0',bw.vals[c2]));
+    }
+    var rowXml=ipRowAttrs(ref.tag,r,bw.thick)+cells.join('')+'</row>';
+    var ex=ipFindRow(xml,r);
+    if(ex)xml=xml.slice(0,ex.start)+rowXml+xml.slice(ex.end);
+    else xml=ipInsertRow(xml,rowXml,r);
+  }
+  z.data[path]=new TextEncoder().encode(xml);
+  return await ipZipClose(z);
+}
 /* write the hours of the shift into the sheet */
 function ipWriteHours(ws,data,X){
   var tmpl=ipRowTemplate(ws);      /* the clean format of the sheet */
@@ -2847,37 +3083,46 @@ function ipWriteHours(ws,data,X){
     var k=ipDataKey(ws,rn,h);
     if(k!=null&&map[k]==null)map[k]=rn;
   });
-  var done=[];
+  var done=[],writes=[];
   data.forEach(function(d){
     var v=vals('r',d,X);
     if(!v)return;
     var h=+d.h, key=today+'|'+h, r=map[key];
     if(r==null){                     /* that hour of that day is not on the sheet yet -> add it */
       r=first;
-      /* the clean format of the sheet - never a broken row of the file */
-      for(var dc=2;dc<=17;dc++) ws.getCell(r,dc).style=ipCellStyle(tmpl.cols[dc],false,false);
-      if(tmpl.height)ws.getRow(r).height=tmpl.height;
       first=r+1; map[key]=r;
     }
+    /* only the DATA is collected here - the format of the rows comes from the
+       file itself (the reference row of the factory) */
+    var w={row:r,h:h,vals:{},red:{}};
     for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
       var L=String.fromCharCode(64+c);
-      var cell=ws.getCell(r,c);
-      var t=tmpl.cols[c]||{};
-      cell.style=ipCellStyle(t,false,false);   /* a clean format, never a broken one */
       var val=v.v[L];
-      if(L==='B'){ cell.value=ipDMY(curISO()); }
-      else if(L==='C'){ cell.value=xlSerialTime(h,0); }
-      else if(val==null||val===''){ cell.value=null; }
-      else if(typeof val==='number'){ cell.value=val; }
-      else if(/^-?\d+(\.\d+)?$/.test(String(val).trim())){ cell.value=parseFloat(val); }
-      else { cell.value=String(val); }
-      if(v.red&&v.red[L]) cell.font=Object.assign({},cell.font||{},{color:{argb:'FFFF0000'}});
+      if(L==='B'){ val=ipDMY(curISO()); }
+      else if(L==='C'){ val=xlSerialTime(h,0); }
+      else if(val==null||val===''){ val=null; }
+      else if(typeof val==='number'){ /* keep the number */ }
+      else if(/^-?\d+(\.\d+)?$/.test(String(val).trim())){ val=parseFloat(val); }
+      else { val=String(val); }
+      w.vals[L]=val;
+      if(v.red&&v.red[L])w.red[L]=1;
     }
-    if(tmpl.height) ws.getRow(r).height=tmpl.height;   /* the height of the factory */
+    writes.push(w);
     done.push(pad(h));
   });
-  ipBlockBorders(ws);            /* the thick line between every shift - always */
-  return {rows:done,hours:done.join(',')};
+  /* the thick line under the last hour of every shift - the way the factory
+     draws it (the thick bottom of the row), never a border we invent */
+  var lastOf={};
+  writes.forEach(function(w){
+    var b=ipBlockOf(w.h);
+    if(!b)return;
+    if(!lastOf[b]||w.h>lastOf[b].h)lastOf[b]={h:w.h,row:w.row};
+  });
+  writes.forEach(function(w){
+    var b=ipBlockOf(w.h);
+    if(b&&lastOf[b]&&lastOf[b].row===w.row)w.thick=1;
+  });
+  return {rows:done,hours:done.join(','),writes:writes,ref:tmpl.ref};
 }
 /* the format of the data rows - taken from the sheet itself (the hand-made
    first data row) and cleaned up, so the rows we write look EXACTLY like the
@@ -3060,7 +3305,9 @@ async function ipLoad(){
     }
     ipHandle=handle;
     ipName=(handle&&handle.name)||(file&&file.name)||'In Process Report.xlsx';
-    ipBook=await new ExcelJS.Workbook().xlsx.load(await file.arrayBuffer());
+    var ab=await file.arrayBuffer();
+    ipRaw=new Uint8Array(ab.slice(0));          /* the bytes of the file - we write into them */
+    ipBook=await new ExcelJS.Workbook().xlsx.load(ab.slice(0));
     var note=document.getElementById('ipNote');
     if(note)note.textContent=ipHandle
       ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
@@ -3089,14 +3336,14 @@ async function ipWrite(){
     ipStatus('Writing into the report…');
     var ExcelJS=await xlEngine();
     var book=ipBook;
+    var raw=null;
     if(ipHandle){                               /* always re-read the file from the disk */
       var f=await ipHandle.getFile();
-      book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
-    }
+      var ab=await f.arrayBuffer();
+      raw=new Uint8Array(ab);
+      book=await new ExcelJS.Workbook().xlsx.load(ab.slice(0));
+    } else if(ipRaw){ raw=ipRaw; }
     ipFresh=false;
-    var now=new Date();
-    book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
-    book.modified=now;
     /* which sheet? The PKOL sheet with the newest data - or the one the user
        picked by hand. A new sheet is NEVER created. */
     var t=ipTarget(book);
@@ -3109,7 +3356,9 @@ async function ipWrite(){
     var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
     var res=ipWriteHours(ws,data,X);
     if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
-    var buf=await book.xlsx.writeBuffer();
+    if(!raw)throw new Error('the file could not be read again');
+    /* ONLY our rows go into the file - the format of the workbook stays as it is */
+    var buf=await ipSurgicalWrite(raw,name,res.writes,res.ref);
     if(ipHandle){
       var w=await ipHandle.createWritable();
       await w.write(buf); await w.close();
