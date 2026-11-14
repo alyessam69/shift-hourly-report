@@ -3713,9 +3713,12 @@ var BOX='<div class="ipbox">'
 var swBook=null, swHandle=null, swName='', swFresh=false, swRaw=null;
 
 /* the name of a new sheet: "Swing Noodles 9-11-2026" */
+/* the name of the sheet of the day - the way the factory names its sheets:
+   the product and then the day: "(85-15) 14.11.2026" */
 function swDefaultName(){
   var p=String(curISO()).split('-');
-  return 'Swing Noodles '+(+p[2])+'-'+(+p[1])+'-'+p[0];
+  var d=(''+(+p[2])).replace(/^0/,'')+'.'+(''+(+p[1])).replace(/^0/,'')+'.'+p[0];
+  return '(85-15) '+d;
 }
 function swNewName(){
   var el=document.getElementById('swNewName');
@@ -3733,19 +3736,25 @@ function swBorderOf(isTop,isBottom,isLeft,isRight){
          left:{style:l,color:{argb:'FF000000'}},right:{style:r,color:{argb:'FF000000'}}};
 }
 /* the sheet of that day, when it is already in the workbook */
+/* the sheet of the day. The factory names its sheets with the product and the
+   day - "(85-15) 14.11.2026" - so we look for that name first, and then for any
+   sheet that carries today's date. The app must write INTO the sheet of the
+   factory, never create a second one and leave the factory's sheet empty. */
 function swDaySheet(book){
   book=book||swBook; if(!book)return null;
   var p=String(curISO()).split('-');
-  var hit=null;
+  var want=String(swDefaultName()).trim().toLowerCase();
+  var hit=null,anyToday=null;
   (book.worksheets||[]).forEach(function(ws){
-    var n=String(ws.name).toLowerCase();
-    if(n.indexOf('swing')<0&&n.indexOf('noodle')<0)return;
-    /* the date in the name: 9-11-2026 or 09-11-2026 - compare it exactly */
-    var m=/(\d{1,2})-(\d{1,2})-(\d{4})/.exec(n);
+    var n=String(ws.name).trim();
+    var nl=n.toLowerCase();
+    if(nl===want){hit=ws;return}          /* the sheet of the factory ✓ */
+    /* any sheet with today's day - the factory writes the day in the name */
+    var m=/(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4})/.exec(nl);
     if(!m)return;
-    if(+m[1]===+p[2]&&+m[2]===+p[1]&&m[3]===p[0])hit=ws;
+    if(+m[1]===+p[2]&&+m[2]===+p[1]&&m[3]===p[0]){if(!anyToday)anyToday=ws}
   });
-  return hit;
+  return hit||anyToday;
 }
 /* a brand new Swing Noodles sheet - the same shape as the export */
 /* a brand new Swing Noodles sheet - EXACTLY like the original one:
@@ -3777,6 +3786,27 @@ function swCreateSheet(book,name){
   return ws;
 }
 /* the rows of the swing sheet: one line per bag (the reading of that hour) */
+/* the file we are about to save is checked: the sheet must be there and it
+   must really have the rows. The app never says "the data was added" when the
+   sheet came out empty. */
+async function ipVerifyWritten(buf,sheetName,expectRows){
+  var ExcelJS=await xlEngine();
+  var book;
+  try{ book=await new ExcelJS.Workbook().xlsx.load(buf); }
+  catch(e){ return {ok:false,found:0,msg:'the file we built could not be read back ('+e.message+')'}; }
+  var ws=null;
+  (book.worksheets||[]).forEach(function(w){if(w.name===sheetName)ws=w});
+  if(!ws)return {ok:false,found:0,msg:'the sheet "'+sheetName+'" is not in the file we built'};
+  var n=0;
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    for(var c=1;c<=11;c++){
+      var v=row.getCell(c).value;
+      if(v!=null&&String(v).trim()!==''){n++;return}
+    }
+  });
+  if(n<expectRows)return {ok:false,found:n,msg:'the sheet came out with only '+n+' row(s) instead of '+expectRows};
+  return {ok:true,found:n};
+}
 /* the values of the rows we wrote - the format of the rows comes from the
    file itself (the rows of the sheet of the day) */
 function swCollect(ws){
@@ -4106,12 +4136,17 @@ async function swWrite(){
       var sb=await scratch.xlsx.writeBuffer();
       if(!raw)throw new Error('the file could not be read again');
       buf=await ipAddSheetFromWorkbook(raw,sb,name,name);
+      /* the sheet of the day must really be there with its rows */
+      var chk=await ipVerifyWritten(buf,name,res.rows);
+      if(!chk.ok)throw new Error(chk.msg);
     } else {
       res=swWriteRows(ws,X);
       if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
       if(!raw)throw new Error('the file could not be read again');
       /* ONLY our rows go into the file - the format of the workbook stays as it is */
       buf=await ipSurgicalWrite(raw,name,swCollect(ws),3);
+      var chk2=await ipVerifyWritten(buf,name,res.rows);
+      if(!chk2.ok)throw new Error(chk2.msg);
     }
     if(swHandle){
       var w=await swHandle.createWritable();
