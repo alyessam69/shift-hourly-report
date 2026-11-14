@@ -2393,7 +2393,7 @@ else start();
    that gets the rows, exactly like the rest of the sheet (same formats and
    a thick border around the block).
    ============================================================================ */
-var xlBook=null, xlHandle=null, xlName='', xlFresh=false;
+var xlBook=null, xlHandle=null, xlName='', xlFresh=false, xlRaw=null;
 
 function xlEngine(){
   if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
@@ -2561,41 +2561,57 @@ function xlBlockBorder(isFirst,isLast,c){
           left:{style:c===2?'medium':'thin'},
           right:{style:c===18?'medium':'thin'}};
 }
-function xlWriteRow(ws,r,v,tmpl,isFirst,isLast){
+/* one hour = one row. Only the DATA is collected here - the format of the
+   row comes from the file itself (the reference row of the factory), so the
+   rows we write look exactly like the rows of the factory. */
+function xlWriteRow(writes,r,v,tmpl,isFirst,isLast,refs){
   var letters=['B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
+  var ref=(isFirst&&refs.start)?refs.start:((isLast&&refs.end)?refs.end:(refs.mid||refs.start));
+  var w={row:r,vals:{},red:{},fmt:{},ref:ref||tmpl.ref};
   letters.forEach(function(L){
-    var c=xlColNum(L);
-    var cell=ws.getCell(r,c);
-    var t=(tmpl&&tmpl.cols&&tmpl.cols[c])||{};
-    cell.style={                       /* a clean format - never the broken one */
-      numFmt:t.numFmt||'General',
-      font:t.font||{name:'Times New Roman',size:9,bold:true},
-      alignment:t.alignment||{horizontal:'center',vertical:'center'},
-      fill:t.fill||{type:'pattern',pattern:'none'},
-      border:xlBlockBorder(isFirst,isLast,c)
-    };
     var val=v.v[L];
     if(L==='B'){
       var p=curISO().split('-');                    /* iso = yyyy-mm-dd */
-      cell.value=xlSerialDate(+p[2],+p[1],+p[0]);  /* day, month, year ✓ */
-      cell.numFmt='dd/mm/yyyy';                    /* the factory reads DD/MM/YYYY ✓ */
+      val=xlSerialDate(+p[2],+p[1],+p[0]);         /* day, month, year ✓ */
+      w.fmt.B='dd/mm/yyyy';                         /* the factory reads DD/MM/YYYY ✓ */
     } else if(L==='C'){
       var h=parseInt(String(val),10);
-      cell.value=isNaN(h)?(val==null?null:val):xlSerialTime(h,0);
+      val=isNaN(h)?(val==null?null:val):xlSerialTime(h,0);
     } else if(val==null||val===''){
-      cell.value=null;
+      val=null;
     } else if(typeof val==='number'){
-      cell.value=val;
+      /* keep the number */
     } else if(/^-?\d+(\.\d+)?$/.test(String(val).trim())){
-      cell.value=parseFloat(val);
+      val=parseFloat(val);
     } else {
-      cell.value=String(val);
+      val=String(val);
     }
-    if(v.red&&v.red[L]) cell.font=Object.assign({},cell.font||{},{color:{argb:'FFFF0000'}});
+    w.vals[L]=val;
+    if(v.red&&v.red[L]) w.red[L]=1;
   });
-  /* the first column of the sheet is empty in the factory - clean it too */
-  ws.getCell(r,1).value=null;
-  if(tmpl&&tmpl.height) ws.getRow(r).height=tmpl.height;
+  /* the first column of the sheet is empty in the factory */
+  w.vals['A']=null;
+  writes.push(w);
+}
+/* the rows of the factory that show what a block looks like:
+   the first row of a block (the medium top), a normal row and the last row of
+   a block (the medium bottom). Our block takes exactly their look. */
+function xlBorderRow(ws,topWant,botWant){
+  var found=0;
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    if(found||rn<=3)return;
+    var b=ws.getCell(rn,2).border||{};
+    if(topWant&&((b.top||{}).style)!==topWant)return;
+    if(botWant&&((b.bottom||{}).style)!==botWant)return;
+    found=rn;
+  });
+  return found;
+}
+function xlBlockRefs(ws,ref){
+  var start=xlBorderRow(ws,'medium',null);
+  var mid=xlBorderRow(ws,'thin','thin');
+  var end=xlBorderRow(ws,null,'medium');
+  return {start:start||ref,mid:mid||start||ref,end:end||mid||start||ref};
 }
 async function xlLoad(){
   try{
@@ -2631,7 +2647,9 @@ async function xlLoad(){
     }
     xlHandle=handle;
     xlName=(handle&&handle.name)||(file&&file.name)||'workbook.xlsx';
-    xlBook=await new ExcelJS.Workbook().xlsx.load(await file.arrayBuffer());
+    var xab=await file.arrayBuffer();
+    xlRaw=new Uint8Array(xab.slice(0));             /* the bytes of the file - we write into them */
+    xlBook=await new ExcelJS.Workbook().xlsx.load(xab.slice(0));
     var note=document.getElementById('xlNote');
     if(note) note.textContent=xlHandle
       ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
@@ -2667,9 +2685,15 @@ async function xlWrite(){
       book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
     }
     xlFresh=false;
-    var now=new Date();
-    book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
-    book.modified=now;
+    var raw=null;
+    if(xlHandle){                              /* always re-read the file from the disk:
+                                                    never lose Excel's own edits, nor the rows
+                                                    another section has just written */
+      var f=await xlHandle.getFile();
+      var xab=await f.arrayBuffer();
+      raw=new Uint8Array(xab);
+      book=await new ExcelJS.Workbook().xlsx.load(xab.slice(0));
+    } else if(xlRaw){ raw=xlRaw; }
     var t=xlTargetSheet(book);   /* the re-read book, not the old one */
     if(!t){xlStatus('⚠ No sheet with a date was found in this workbook.',true);return}
     var ws=t.ws;
@@ -2678,9 +2702,13 @@ async function xlWrite(){
     data.forEach(function(d){var v=vals('p',d,X); if(v)rows.push(v)});
     var start=xlNextRow(ws,2,18), r=start, wrote=rows.length;
     var tmpl=xlRowTemplate(ws);       /* the clean format of the sheet */
-    rows.forEach(function(v,i){xlWriteRow(ws,r,v,tmpl,i===0,i===rows.length-1); r++});
+    var refs=xlBlockRefs(ws,tmpl.ref);  /* the look of the blocks of the factory */
+    var writes=[];
+    rows.forEach(function(v,i){xlWriteRow(writes,r,v,tmpl,i===0,i===rows.length-1,refs); r++});
     if(!wrote){xlStatus('Nothing to write in this shift.',true);return}
-    var buf=await book.xlsx.writeBuffer();
+    if(!raw)throw new Error('the file could not be read again');
+    /* ONLY our rows go into the file - the format of the workbook stays as it is */
+    var buf=await ipSurgicalWrite(raw,ws.name,writes,tmpl.ref);
     if(xlHandle){
       var w=await xlHandle.createWritable();
       await w.write(buf); await w.close();
@@ -2693,6 +2721,7 @@ async function xlWrite(){
     }
     xlPlan();
     xlStatus((xlHandle?'✅ ':'⬇️ ')+wrote+' row(s) written to '+ws.name+' (row '+start+'–'+(start+wrote-1)+')'+
+      ' — only that sheet changed, the rest of the workbook is untouched'+
       (xlHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     xlStatus('ERROR: '+e.message,true);
@@ -2945,9 +2974,12 @@ function ipSheetPath(z,name){
   if(!tag)return null;
   var rid=(/r:id="([^"]+)"/.exec(tag)||[])[1];
   if(!rid)return null;
-  var m=new RegExp('<Relationship[^>]*Id="'+rid+'"[^>]*Target="([^"]+)"').exec(rels);
-  if(!m)return null;
-  var t=m[1].replace(/^\//,'');
+  /* the order of the attributes is not the same in every file */
+  var rel=new RegExp('<Relationship[^>]*Id="'+rid+'"[^>]*>').exec(rels);
+  if(!rel)return null;
+  var mt=/Target="([^"]+)"/.exec(rel[0]);
+  if(!mt)return null;
+  var t=mt[1].replace(/^\//,'');
   return t.indexOf('xl/')===0?t:'xl/'+t;
 }
 /* the cells of a row: {B:{s:'134',xml:'...'},...} */
@@ -2992,10 +3024,12 @@ function ipCellXml(col,r,s,val){
   if(typeof val==='number'&&isFinite(val))return '<c r="'+ref+'" s="'+s+'"><v>'+val+'</v></c>';
   return '<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t>'+ipXmlEsc(val)+'</t></is></c>';
 }
-/* the red of the factory (the same border + the red font). If the file has no
-   red twin of that cell, we add one - the format of the file itself never
-   changes, we only add the red we need. */
-function ipRedStyle(z,baseS){
+/* another version of the style of a cell: the red of the factory and/or
+   another number format. If the file has no such twin, we add one - the
+   format of the file itself never changes, we only add what we need. */
+function ipRedStyle(z,baseS,opt){
+  opt=opt||{};
+  if(!opt.red&&!opt.numFmt)return baseS;
   var key='xl/styles.xml';
   var xml=new TextDecoder().decode(z.data[key]||new Uint8Array(0));
   var fm=/<fonts([^>]*)>([\s\S]*?)<\/fonts>/.exec(xml);
@@ -3010,29 +3044,80 @@ function ipRedStyle(z,baseS){
   var bFill=at(base,/fillId="(\d+)"/,'0'), bFont=at(base,/fontId="(\d+)"/,'0');
   var bAl=(/<alignment[^>]*\/>/.exec(base)||[''])[0];
   var redFont=-1,i;
-  for(i=0;i<fonts.length;i++)if(/FFFF0000/i.test(fonts[i])){redFont=i;break}
-  if(redFont>=0){                       /* is there a red twin of that cell? */
-    for(i=0;i<xfs.length;i++){
-      var x=xfs[i];
-      if(+at(x,/fontId="(\d+)"/,'0')!==redFont)continue;
-      if(at(x,/borderId="(\d+)"/,'0')===bBorder&&at(x,/numFmtId="(\d+)"/,'0')===bNum&&
-         at(x,/fillId="(\d+)"/,'0')===bFill&&((/<alignment[^>]*\/>/.exec(x)||[''])[0])===bAl)return i;
+  for(i=0;i<fonts.length;i++)if(/FFFF0000/i.test(fonts[i])){redFont=i;break;
+  }
+  /* the number format we want */
+  var wantNum=null, addNum=null;
+  if(opt.numFmt){
+    var nfTag=/<numFmts([^>]*)>([\s\S]*?)<\/numFmts>/.exec(xml);
+    var nfs=nfTag?nfTag[2].match(/<numFmt\b[^>]*\/>/g)||[]:[];
+    for(i=0;i<nfs.length;i++)if(/formatCode="([^"]*)"/.exec(nfs[i])&&
+      /formatCode="([^"]*)"/.exec(nfs[i])[1]===opt.numFmt){wantNum=+(/numFmtId="(\d+)"/.exec(nfs[i])||[0,164])[1];break}
+    if(wantNum===null){                 /* the format is not in the file -> add it */
+      var used={},mU=/numFmtId="(\d+)"/g,mU2;
+      while((mU2=mU.exec(xml))!==null)used[+mU2[1]]=1;
+      var nid=164;while(used[nid])nid++;
+      wantNum=nid;
+      addNum='<numFmt numFmtId="'+nid+'" formatCode="'+opt.numFmt.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"/>';
     }
   }
-  var font=fonts[+bFont];
-  if(!font)return null;
-  var newFont=font.replace(/<color[^>]*\/>/,'');
-  if(/<name\b/.test(newFont))newFont=newFont.replace(/<name\b/,'<color rgb="FFFF0000"/><name');
-  else newFont=newFont.replace(/<\/font>/,'<color rgb="FFFF0000"/></font>');
-  var newFontId=fonts.length;
-  var newXfs=base.replace(/fontId="\d+"/,'fontId="'+newFontId+'"');
-  if(/applyFont="/.test(newXfs))newXfs=newXfs.replace(/applyFont="[^"]*"/,'applyFont="1"');
-  else newXfs=newXfs.replace(/^<xf /,'<xf applyFont="1" ');
+  /* the font we want: the red of the file, or the red we have to add */
+  var wantFont=+bFont, addFont=null;
+  if(opt.red){
+    if(redFont>=0){wantFont=redFont}
+    else{
+      var font=fonts[+bFont];
+      if(font){
+        var nf2=font.replace(/<color[^>]*\/>/,'');
+        if(/<name\b/.test(nf2))nf2=nf2.replace(/<name\b/,'<color rgb="FFFF0000"/><name');
+        else nf2=nf2.replace(/<\/font>/,'<color rgb="FFFF0000"/></font>');
+        addFont=nf2;wantFont=fonts.length;
+      }
+    }
+  }
+  var wantNumId=(wantNum!==null)?wantNum:+bNum;
+  for(i=0;i<xfs.length;i++){           /* is there a twin of that cell? */
+    var x=xfs[i];
+    if(+at(x,/fontId="(\d+)"/,'0')!==wantFont)continue;
+    if(+at(x,/numFmtId="(\d+)"/,'0')!==wantNumId)continue;
+    if(at(x,/borderId="(\d+)"/,'0')!==bBorder)continue;
+    if(at(x,/fillId="(\d+)"/,'0')!==bFill)continue;
+    if((/<alignment[^>]*\/>/.exec(x)||[''])[0]!==bAl)continue;
+    return i;
+  }
+  var newFontId=wantFont;
+  var newXfs=base;
+  if(newFontId!==+bFont)newXfs=newXfs.replace(/fontId="\d+"/,'fontId="'+newFontId+'"');
+  if(wantNum!==null&&wantNum!==+bNum){
+    newXfs=newXfs.replace(/numFmtId="\d+"/,'numFmtId="'+wantNum+'"');
+    if(/applyNumberFormat="/.test(newXfs))newXfs=newXfs.replace(/applyNumberFormat="[^"]*"/,'applyNumberFormat="1"');
+    else newXfs=newXfs.replace(/^<xf /,'<xf applyNumberFormat="1" ');
+  }
+  if(newFontId!==+bFont){
+    if(/applyFont="/.test(newXfs))newXfs=newXfs.replace(/applyFont="[^"]*"/,'applyFont="1"');
+    else newXfs=newXfs.replace(/^<xf /,'<xf applyFont="1" ');
+  }
   var newXfId=xfs.length;
-  var nf=fm[1].replace(/count="\d+"/,'count="'+(fonts.length+1)+'"');
-  var nx=xm[1].replace(/count="\d+"/,'count="'+(xfs.length+1)+'"');
-  var out=xml.replace(fm[0],function(){return '<fonts'+nf+'>'+fm[2]+newFont+'</fonts>'})
-               .replace(xm[0],function(){return '<cellXfs'+nx+'>'+xm[2]+newXfs+'</cellXfs>'});
+  var nfAttrs=fm[1].replace(/count="\d+"/,function(){return 'count="'+(fonts.length+(addFont?1:0))+'"'});
+  var nxAttrs=xm[1].replace(/count="\d+"/,function(){return 'count="'+(xfs.length+1)+'"'});
+  var out=xml;
+  if(addFont)out=out.replace(fm[0],function(){return '<fonts'+nfAttrs+'>'+fm[2]+addFont+'</fonts>'});
+  if(addNum){
+    var nfTag=/<numFmts([^>]*?)(\/>|>)/.exec(out);
+    if(nfTag){
+      var cnt=(/count="(\d+)"/.exec(nfTag[1])||[0,1])[1];
+      var head='<numFmts'+nfTag[1].replace(/count="\d+"/,function(){return 'count="'+(+cnt+1)+'"'});
+      if(nfTag[2]==='/>'){                     /* an empty section -> open it */
+        out=out.replace(nfTag[0],head+'>'+addNum+'</numFmts>');
+      } else {
+        out=out.replace(nfTag[0],head+'>');
+        out=out.replace('</numFmts>',addNum+'</numFmts>');
+      }
+    } else {
+      out=out.replace('<fonts','<numFmts count="1">'+addNum+'</numFmts><fonts');
+    }
+  }
+  out=out.replace(xm[0],function(){return '<cellXfs'+nxAttrs+'>'+xm[2]+newXfs+'</cellXfs>'});
   z.data[key]=new TextEncoder().encode(out);
   return newXfId;
 }
@@ -3061,6 +3146,117 @@ async function ipSurgicalWrite(raw,sheetName,writes,refRow){
   z.data[path]=new TextEncoder().encode(ipApplyWrites(z,xml,writes,refRow));
   return await ipZipClose(z);
 }
+/* the styles of a scratch workbook (ExcelJS) are put into the file: the
+   fonts, the fills, the borders and the cell formats are appended and the
+   sheet of the scratch uses the new ids (the offset of the cell formats). */
+function ipMergeStyles(z,scratchXml){
+  var key='xl/styles.xml';
+  var xml=new TextDecoder().decode(z.data[key]);
+  var dec=new TextDecoder();
+  var g=function(x,tag){
+    var m=new RegExp('<'+tag+'([^>]*?)>([\\s\\S]*?)</'+tag+'>').exec(x);
+    return m?{a:m[1],b:m[2],all:m[0]}:null;
+  };
+  var oF=g(xml,'fonts'),oL=g(xml,'fills'),oB=g(xml,'borders'),oX=g(xml,'cellXfs');
+  var sF=g(scratchXml,'fonts'),sL=g(scratchXml,'fills'),sB=g(scratchXml,'borders'),sX=g(scratchXml,'cellXfs');
+  if(!oF||!oL||!oB||!oX||!sF||!sL||!sB||!sX)return null;
+  var cnt=function(x){var m=/count="(\d+)"/.exec(x.a);return m?+m[1]:0};
+  var nF=cnt(oF),nL=cnt(oL),nB=cnt(oB),nX=cnt(oX);
+  /* the number formats: the custom ones of the scratch get free ids */
+  var numMap={},addNums=[];
+  var sN=g(scratchXml,'numFmts'),oN=g(xml,'numFmts');
+  var used={};
+  if(oN){var mu=/numFmtId="(\d+)"/g,m2;while((m2=mu.exec(oN.b))!==null)used[+m2[1]]=1;}
+  if(sN){
+    var nl=sN.b.match(/<numFmt\b[^>]*\/>/g)||[];
+    for(var i=0;i<nl.length;i++){
+      var id=+(/numFmtId="(\d+)"/.exec(nl[i])||[0,0])[1], code=(/formatCode="([^"]*)"/.exec(nl[i])||[0,''])[1];
+      var hit=null;
+      if(oN){var ol=oN.b.match(/<numFmt\b[^>]*\/>/g)||[];
+        for(var j=0;j<ol.length;j++)if((/formatCode="([^"]*)"/.exec(ol[j])||[0,''])[1]===code)hit=+(/numFmtId="(\d+)"/.exec(ol[j])||[0,0])[1];}
+      if(hit===null){var nid=164;while(used[nid])nid++;used[nid]=1;hit=nid;addNums.push('<numFmt numFmtId="'+nid+'" formatCode="'+code.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"/>');}
+      numMap[id]=hit;
+    }
+  }
+  /* the cell formats of the scratch, with the new ids of the fonts/fills/borders */
+  var xl=sX.b.match(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g)||[];
+  var newXfs=xl.map(function(x){
+    x=x.replace(/fontId="(\d+)"/,function(a,d){return 'fontId="'+(+d+nF)+'"'});
+    x=x.replace(/fillId="(\d+)"/,function(a,d){return 'fillId="'+(+d+nL)+'"'});
+    x=x.replace(/borderId="(\d+)"/,function(a,d){return 'borderId="'+(+d+nB)+'"'});
+    x=x.replace(/numFmtId="(\d+)"/,function(a,d){var v=numMap[+d];return 'numFmtId="'+(v!==undefined?v:+d)+'"'});
+    return x;
+  }).join('');
+  /* write it back */
+  var out=xml;
+  out=out.replace(oF.all,function(){return '<fonts'+oF.a.replace(/count="\d+"/,function(){return 'count="'+(nF+cnt(sF))+'"'})+'>'+oF.b+sF.b+'</fonts>';});
+  out=out.replace(oL.all,function(){return '<fills'+oL.a.replace(/count="\d+"/,function(){return 'count="'+(nL+cnt(sL))+'"'})+'>'+oL.b+sL.b+'</fills>';});
+  out=out.replace(oB.all,function(){return '<borders'+oB.a.replace(/count="\d+"/,function(){return 'count="'+(nB+cnt(sB))+'"'})+'>'+oB.b+sB.b+'</borders>';});
+  out=out.replace(oX.all,function(){return '<cellXfs'+oX.a.replace(/count="\d+"/,function(){return 'count="'+(nX+xl.length)+'"'})+'>'+oX.b+newXfs+'</cellXfs>';});
+  if(addNums.length){
+    if(oN){
+      out=out.replace(oN.all,function(){return '<numFmts'+oN.a.replace(/count="\d+"/,function(){return 'count="'+(cnt(oN)+addNums.length)+'"'})+'>'+oN.b+addNums.join('')+'</numFmts>';});
+    } else {
+      out=out.replace('<fonts','<numFmts count="'+addNums.length+'">'+addNums.join('')+'</numFmts><fonts');
+    }
+  }
+  z.data[key]=new TextEncoder().encode(out);
+  return {xf:nX};          /* the id of a cell format of the scratch + this offset */
+}
+/* the shared strings of another workbook become the text inside the cells */
+function ipInlineStrings(sheetXml,sharedXml){
+  if(!sharedXml)return sheetXml;
+  var strs=[],m,re=/<si>([\s\S]*?)<\/si>/g;
+  while((m=re.exec(sharedXml))!==null){
+    var t='',tt=/<t[^>]*>([\s\S]*?)<\/t>/g,m2;
+    while((m2=tt.exec(m[1]))!==null)t+=m2[1];
+    strs.push(t);
+  }
+  return sheetXml.replace(/<c\b([^>]*?)t="s"([^>]*?)>\s*<v>(\d+)<\/v>\s*<\/c>/g,
+    function(a,pre,post,idx){
+      var v=strs[+idx];
+      if(v===undefined)return a;
+      return '<c'+pre+'t="inlineStr"'+post+'><is><t xml:space="preserve">'+v+'</t></is></c>';
+    });
+}
+/* a sheet of a scratch workbook (ExcelJS) is put into the file as a new sheet */
+async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName){
+  var sz=await ipZipOpen(new Uint8Array(scratchBuf));
+  var sp=ipSheetPath(sz,scratchSheet);
+  if(!sp)throw new Error('the new sheet could not be built');
+  var sheetXml=new TextDecoder().decode(sz.data[sp]);
+  var styleXml=sz.data['xl/styles.xml']?new TextDecoder().decode(sz.data['xl/styles.xml']):'';
+  /* the text of the scratch uses the shared strings of the scratch - we write
+     it inside the cells, so the strings of the file stay as they are */
+  if(sz.data['xl/sharedStrings.xml'])sheetXml=ipInlineStrings(sheetXml,new TextDecoder().decode(sz.data['xl/sharedStrings.xml']));
+  var z=await ipZipOpen(raw);
+  var off=ipMergeStyles(z,styleXml);
+  if(!off)throw new Error('the styles of the new sheet could not be merged');
+  /* the ids of the cell formats change with the merge */
+  sheetXml=sheetXml.replace(/ s="(\d+)"/g,function(a,d){return ' s="'+(+d+off.xf)+'"'});
+  /* the new part */
+  var n=1,part,base;
+  while(true){part='xl/worksheets/sheet'+(950+n)+'.xml';if(!z.data[part])break;n++;}
+  base=part.split('/').pop();
+  z.data[part]=new TextEncoder().encode(sheetXml);
+  z.order.push(part);
+  /* the book */
+  var wb=new TextDecoder().decode(z.data['xl/workbook.xml']);
+  var rels=new TextDecoder().decode(z.data['xl/_rels/workbook.xml.rels']);
+  var maxId=0,m,mx=/sheetId="(\d+)"/g;
+  while((m=mx.exec(wb))!==null)maxId=Math.max(maxId,+m[1]);
+  var maxRid=0,m2,mr=/Id="rId(\d+)"/g;
+  while((m2=mr.exec(rels))!==null)maxRid=Math.max(maxRid,+m2[1]);
+  var rid='rId'+(maxRid+1);
+  z.data['xl/workbook.xml']=new TextEncoder().encode(
+    wb.replace('</sheets>','<sheet '+IP_RNS+'name="'+ipXmlEsc(newName)+'" sheetId="'+(maxId+1)+'" r:id="'+rid+'"/></sheets>'));
+  z.data['xl/_rels/workbook.xml.rels']=new TextEncoder().encode(
+    rels.replace('</Relationships>','<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/'+base+'"/></Relationships>'));
+  var ct=new TextDecoder().decode(z.data['[Content_Types].xml']);
+  z.data['[Content_Types].xml']=new TextEncoder().encode(
+    ct.replace('</Types>','<Override PartName="/'+part+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'));
+  return await ipZipClose(z);
+}
 /* put our rows into the xml of a sheet - nothing else of the sheet changes */
 function ipApplyWrites(z,xml,writes,refRow){
   var ref=ipFindRow(xml,refRow);
@@ -3074,15 +3270,26 @@ function ipApplyWrites(z,xml,writes,refRow){
     for(vk2=0;vk2<vk.length;vk2++)byRow[w.row].vals[vk[vk2]]=w.vals[vk[vk2]];
     rk2=Object.keys(w.red||{});
     for(vk2=0;vk2<rk2.length;vk2++){if(w.red[rk2[vk2]])byRow[w.row].red[rk2[vk2]]=1}
+    if(w.fmt)byRow[w.row].fmt=w.fmt;
+    if(w.ref)byRow[w.row].ref=w.ref;
     if(w.thick)byRow[w.row].thick=1;
   }
   var rows=Object.keys(byRow);
   for(k=0;k<rows.length;k++){
     var r=+rows[k],bw=byRow[rows[k]],cells=[],ci;
-    for(ci=0;ci<refCols.length;ci++){
-      var col=refCols[ci],rc=ref.cells[col],s=rc.s;
+    /* the row the format comes from (the factory rows can differ: the end of
+       a block has a medium bottom) */
+    var src=ref;
+    if(bw.ref&&bw.ref!==refRow){
+      var sr=ipFindRow(xml,bw.ref);
+      if(sr)src=sr;
+    }
+    var srcCols=Object.keys(src.cells);
+    for(ci=0;ci<srcCols.length;ci++){
+      var col=srcCols[ci],rc=src.cells[col],s=rc.s;
       if(Object.prototype.hasOwnProperty.call(bw.vals,col)){
-        if(bw.red[col]){var rs=ipRedStyle(z,+s);if(rs!==null&&rs!==undefined)s=String(rs)}
+        if(bw.red[col]){var rs=ipRedStyle(z,+s,{red:true});if(rs!==null&&rs!==undefined)s=String(rs)}
+        if(bw.fmt&&bw.fmt[col]){var fs=ipRedStyle(z,+s,{numFmt:bw.fmt[col]});if(fs!==null&&fs!==undefined)s=String(fs)}
         cells.push(ipCellXml(col,r,s,bw.vals[col]));
       }else{
         cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
@@ -3091,15 +3298,16 @@ function ipApplyWrites(z,xml,writes,refRow){
     var extra=Object.keys(bw.vals);
     for(ci=0;ci<extra.length;ci++){
       var c2=extra[ci];
-      if(!ref.cells[c2])cells.push(ipCellXml(c2,r,'0',bw.vals[c2]));
+      if(!src.cells[c2])cells.push(ipCellXml(c2,r,'0',bw.vals[c2]));
     }
-    var rowXml=ipRowAttrs(ref.tag,r,bw.thick)+cells.join('')+'</row>';
+    var rowXml=ipRowAttrs(src.tag,r,bw.thick)+cells.join('')+'</row>';
     var ex=ipFindRow(xml,r);
     if(ex)xml=xml.slice(0,ex.start)+rowXml+xml.slice(ex.end);
     else xml=ipInsertRow(xml,rowXml,r);
   }
   return xml;
 }
+var IP_RNS='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ';
 /* a NEW sheet: a copy of the sheet of the factory with our rows in it.
    The sheets of the factory are not touched at all. */
 async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow){
@@ -3133,7 +3341,7 @@ async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow){
   var maxRid=0,m2,mr=/Id="rId(\d+)"/g;
   while((m2=mr.exec(rels))!==null)maxRid=Math.max(maxRid,+m2[1]);
   var rid='rId'+(maxRid+1);
-  var tag='<sheet name="'+ipXmlEsc(newName)+'" sheetId="'+(maxId+1)+'" r:id="'+rid+'"/>';
+  var tag='<sheet '+IP_RNS+'name="'+ipXmlEsc(newName)+'" sheetId="'+(maxId+1)+'" r:id="'+rid+'"/>';
   z.data['xl/workbook.xml']=new TextEncoder().encode(wb.replace('</sheets>',tag+'</sheets>'));
   var relTag='<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/'+base+'"/>';
   z.data['xl/_rels/workbook.xml.rels']=new TextEncoder().encode(rels.replace('</Relationships>',relTag+'</Relationships>'));
@@ -3502,7 +3710,7 @@ var BOX='<div class="ipbox">'
  +'<span class="hint" id="swStatus" style="padding:0"></span>'
  +'</div><div id="swPlan"></div><div id="swNote"></div></div>';
 
-var swBook=null, swHandle=null, swName='', swFresh=false;
+var swBook=null, swHandle=null, swName='', swFresh=false, swRaw=null;
 
 /* the name of a new sheet: "Swing Noodles 9-11-2026" */
 function swDefaultName(){
@@ -3569,6 +3777,29 @@ function swCreateSheet(book,name){
   return ws;
 }
 /* the rows of the swing sheet: one line per bag (the reading of that hour) */
+/* the values of the rows we wrote - the format of the rows comes from the
+   file itself (the rows of the sheet of the day) */
+function swCollect(ws){
+  var writes=[],rn,cn;
+  var last=2+SW_MAXBAG;
+  for(rn=3;rn<=last;rn++){
+    var w={row:rn,vals:{},red:{},
+           ref:(rn===3)?3:((rn===last)?last:4)};
+    for(cn=1;cn<=11;cn++){
+      var L=colL(cn-1), cell=ws.getCell(rn,cn), v=cell.value;
+      if(v==null||v===''){w.vals[L]=null;continue}
+      if(v instanceof Date) v=xlSerialTime(v.getUTCHours(),v.getUTCMinutes());
+      else if(typeof v==='number'){/* keep it */}
+      else if(/^-?\d+(\.\d+)?$/.test(String(v).trim())) v=parseFloat(v);
+      else v=String(v);
+      w.vals[L]=v;
+      var f=cell.font||{}, col=f.color||{};
+      if(String(col.argb||'').toUpperCase()==='FFFF0000')w.red[L]=1;
+    }
+    writes.push(w);
+  }
+  return writes;
+}
 /* the rows of the swing sheet: one line per bag - the same rows the Excel
    export writes (only the registered hours) and the same look as the original */
 var SW_MAXBAG=200;                          /* the whole day has 200 bags: B1..B200 */
@@ -3800,7 +4031,9 @@ async function swLoad(){
     }
     swHandle=handle;
     swName=(handle&&handle.name)||(file&&file.name)||'workbook.xlsx';
-    swBook=await new ExcelJS.Workbook().xlsx.load(await file.arrayBuffer());
+    var sab=await file.arrayBuffer();
+    swRaw=new Uint8Array(sab.slice(0));             /* the bytes of the file - we write into them */
+    swBook=await new ExcelJS.Workbook().xlsx.load(sab.slice(0));
     var note=document.getElementById('swNote');
     if(note)note.textContent=swHandle
       ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
@@ -3833,10 +4066,14 @@ async function swWrite(){
       var f=await swHandle.getFile();
       book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
     }
+    var raw=null;
+    if(swHandle){                               /* always re-read the file from the disk */
+      var f=await swHandle.getFile();
+      var ab=await f.arrayBuffer();
+      raw=new Uint8Array(ab);
+      book=await new ExcelJS.Workbook().xlsx.load(ab.slice(0));
+    } else if(swRaw){ raw=swRaw; }
     swFresh=false;
-    var now=new Date();
-    book.created=(book.created instanceof Date&&!isNaN(book.created))?book.created:now;
-    book.modified=now;
     var sel=document.getElementById('swSheet');
     var makeNew=(sel&&sel.value==='__new__');
     var ws=null,how='',name='';
@@ -3855,12 +4092,27 @@ async function swWrite(){
       var nm=swNewName();
       var ex=book.getWorksheet(nm);
       if(ex){ws=ex;how='existing';name=nm}
-      else{ws=swCreateSheet(book,nm);how='created';name=nm}
+      else{how='created';name=nm}    /* it is built in a scratch workbook below */
     }
     var X=xs();
-    var res=swWriteRows(ws,X);
-    if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
-    var buf=await book.xlsx.writeBuffer();
+    var res,buf;
+    if(how==='created'){
+      /* the sheet of the day is new: it is built in a scratch workbook and
+         then put into the file - the rest of the workbook is not touched */
+      var scratch=new ExcelJS.Workbook();
+      var sws=swCreateSheet(scratch,name);
+      res=swWriteRows(sws,X);
+      if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
+      var sb=await scratch.xlsx.writeBuffer();
+      if(!raw)throw new Error('the file could not be read again');
+      buf=await ipAddSheetFromWorkbook(raw,sb,name,name);
+    } else {
+      res=swWriteRows(ws,X);
+      if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
+      if(!raw)throw new Error('the file could not be read again');
+      /* ONLY our rows go into the file - the format of the workbook stays as it is */
+      buf=await ipSurgicalWrite(raw,name,swCollect(ws),3);
+    }
     if(swHandle){
       var w=await swHandle.createWritable();
       await w.write(buf); await w.close();
@@ -3871,10 +4123,10 @@ async function swWrite(){
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function(){URL.revokeObjectURL(a.href)},8000);
     }
-    swBook=book;                         /* keep the in-memory book in step with the file */
     swFillSelect(); swPlan();
     swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
       (res.bags?' ('+res.bags+')':'')+
+      ' — only that sheet changed, the rest of the workbook is untouched'+
       (how==='created'?(' — the sheet was created with the bags of the day (B'+res.from+'..B'+res.to+')'):' — the sheet of that day')+
       (res.dropped?(' ⚠ the day ends at B200 — '+res.dropped+' bag(s) did not fit'):'')+
       (swHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
