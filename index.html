@@ -3255,7 +3255,7 @@ function ipInlineStrings(sheetXml,sharedXml){
     });
 }
 /* a sheet of a scratch workbook (ExcelJS) is put into the file as a new sheet */
-async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName){
+async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName,replaceIt){
   var sz=await ipZipOpen(new Uint8Array(scratchBuf));
   var sp=ipSheetPath(sz,scratchSheet);
   if(!sp)throw new Error('the new sheet could not be built');
@@ -3269,6 +3269,15 @@ async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName){
   if(!off)throw new Error('the styles of the new sheet could not be merged');
   /* the ids of the cell formats change with the merge */
   sheetXml=sheetXml.replace(/ s="(\d+)"/g,function(a,d){return ' s="'+(+d+off.xf)+'"'});
+  /* the sheet of the day is there but empty: it gets the new content */
+  if(replaceIt){
+    var oldPath=ipSheetPath(z,newName);
+    if(oldPath){
+      var clean=sheetXml.replace(/\s*r:id="[^"]*"/g,'');   /* no links of the scratch */
+      z.data[oldPath]=new TextEncoder().encode(clean);
+      return await ipZipClose(z);
+    }
+  }
   /* the new part */
   var n=1,part,base;
   while(true){part='xl/worksheets/sheet'+(950+n)+'.xml';if(!z.data[part])break;n++;}
@@ -3308,6 +3317,7 @@ function ipApplyWrites(z,xml,writes,refRow){
     if(w.fmt)byRow[w.row].fmt=w.fmt;
     if(w.ref)byRow[w.row].ref=w.ref;
     if(w.edge)byRow[w.row].edge=w.edge;
+    if(w.bd)byRow[w.row].bd=w.bd;
     if(w.thick)byRow[w.row].thick=1;
   }
   var rows=Object.keys(byRow);
@@ -3328,6 +3338,8 @@ function ipApplyWrites(z,xml,writes,refRow){
         if(bw.fmt&&bw.fmt[col]){var fs=ipRedStyle(z,+s,{numFmt:bw.fmt[col]});if(fs!==null&&fs!==undefined)s=String(fs)}
         /* the outside of our block is thick - the right edge of the last column */
         if(bw.edge&&col===bw.edge){var bs=ipRedStyle(z,+s,{border:{right:'medium'}});if(bs!==null&&bs!==undefined)s=String(bs)}
+        /* the border of the block of the Swing sheet: the outside is thick */
+        if(bw.bd&&bw.bd[col]){var b2=ipRedStyle(z,+s,{border:bw.bd[col]});if(b2!==null&&b2!==undefined)s=String(b2)}
         cells.push(ipCellXml(col,r,s,bw.vals[col]));
       }else{
         cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
@@ -3782,17 +3794,28 @@ function swDaySheet(book){
   book=book||swBook; if(!book)return null;
   var p=String(curISO()).split('-');
   var want=String(swDefaultName()).trim().toLowerCase();
-  var hit=null,anyToday=null;
+  var best=null,bestScore=0;
   (book.worksheets||[]).forEach(function(ws){
-    var n=String(ws.name).trim();
-    var nl=n.toLowerCase();
-    if(nl===want){hit=ws;return}          /* the sheet of the factory ✓ */
-    /* any sheet with today's day - the factory writes the day in the name */
+    var n=String(ws.name).trim(), nl=n.toLowerCase();
     var m=/(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4})/.exec(nl);
-    if(!m)return;
-    if(+m[1]===+p[2]&&+m[2]===+p[1]&&m[3]===p[0]){if(!anyToday)anyToday=ws}
+    var isToday=!!(m&&+m[1]===+p[2]&&+m[2]===+p[1]&&m[3]===p[0]);
+    if(!isToday&&nl!==want)return;             /* only the sheets of the day */
+    /* the score: the name the factory gives to its Swing sheet first, then the
+       header of the sheet. A sheet without the Swing header is never taken. */
+    var score=0;
+    if(nl===want){
+      /* the name of the factory. An empty sheet is taken as well - but a sheet
+         whose header says it is something else is not. */
+      if(swHasHeader(ws)&&!swIsSwingSheet(ws))return;
+      score=30;
+    }else{
+      if(!swIsSwingSheet(ws))return;          /* only a real Swing sheet */
+      score=20;
+      if(/swing|noodle/.test(nl))score+=5;
+    }
+    if(score>bestScore){bestScore=score;best=ws}
   });
-  return hit||anyToday;
+  return best;
 }
 /* a brand new Swing Noodles sheet - the same shape as the export */
 /* a brand new Swing Noodles sheet - EXACTLY like the original one:
@@ -3827,7 +3850,7 @@ function swCreateSheet(book,name){
 /* the file we are about to save is checked: the sheet must be there and it
    must really have the rows. The app never says "the data was added" when the
    sheet came out empty. */
-async function ipVerifyWritten(buf,sheetName,expectRows){
+async function ipVerifyWritten(buf,sheetName,expectRows,keys){
   var ExcelJS=await xlEngine();
   var book;
   try{ book=await new ExcelJS.Workbook().xlsx.load(buf); }
@@ -3843,6 +3866,18 @@ async function ipVerifyWritten(buf,sheetName,expectRows){
     }
   });
   if(n<expectRows)return {ok:false,found:n,msg:'the sheet came out with only '+n+' row(s) instead of '+expectRows};
+  /* the bags we wrote must really be there */
+  if(keys&&keys.length){
+    var got={};
+    ws.eachRow({includeEmpty:false},function(row,rn){
+      var v=row.getCell(2).value;
+      if(v!=null&&String(v).trim()!=='')got[String(v).trim()]=rn;
+    });
+    for(var i=0;i<keys.length;i++){
+      if(got[keys[i]]===undefined)
+        return {ok:false,found:n,msg:'the bag '+keys[i]+' is not in the sheet we built'};
+    }
+  }
   return {ok:true,found:n};
 }
 /* the values of the rows we wrote - the format of the rows comes from the
@@ -3937,13 +3972,20 @@ function swScanSheet(ws){
     /* the last row of the earlier shifts: the end of their block */
     if(swRowFilled(row)){prevEnd=rn;prevBag=swBagNo(b,0)}
   });
-  return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag};
+  /* the rows that already have a result of an earlier shift - they are never
+     used again (our rows go around them) */
+  var busy={};
+  ws.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=2)return;
+    if(swRowFilled(row)&&(!CUR||swRowShift(row)!==CUR))busy[rn]=1;
+  });
+  return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag,busy:busy};
 }
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
   var sw=swingRows(reg,X);
   var sc=swScanSheet(ws);
-  var map=sc.map,last=sc.last,firstBag=sc.firstBag,mine=sc.mine,prevEnd=sc.prevEnd,prevBag=sc.prevBag;
+  var map=sc.map,last=sc.last,firstBag=sc.firstBag;
   /* the day is written up to B200. The rows that have no result yet keep only
      the numbering, the bag and the date - the shift that has the results
      fills its own rows. A sheet that does not exist yet starts at the first
@@ -3956,37 +3998,8 @@ function swWriteRows(ws,X){
       swBlankRow(ws,brn,bkey);
     }
   }
-  /* where does every bag go?
-     - this shift is already in the sheet: the same rows again
-     - the earlier shifts are in the sheet: the rows of this shift start right
-       after the last row that has a result and the bag numbers carry on
-       (the last one of shift A is B38 -> this shift starts at B39) until B200
-     - the sheet has no result yet: the rows keep their own place */
-  var plan=[],startBag=swBounds(CUR).st,dropped=0;
-  if(mine.length){
-    var lastMine=mine[mine.length-1];
-    sw.rows.forEach(function(r,i){
-      var rn,key;
-      if(i<mine.length){rn=mine[i].rn;key=mine[i].key||('B'+(lastMine.no+i-mine.length+1))}
-      else{rn=lastMine.rn+1+(i-mine.length);key='B'+(lastMine.no+1+(i-mine.length))}
-      plan.push({key:key,rn:rn,r:r});
-    });
-  }else if(prevEnd>0){
-    startBag=(prevBag>0?prevBag+1:swBounds(CUR).st);
-    sw.rows.forEach(function(r,i){
-      var bno=startBag+i;
-      if(bno>SW_MAXBAG){dropped++;return}        /* the day ends at B200 */
-      plan.push({key:'B'+bno,rn:prevEnd+1+i,r:r});
-    });
-  }else{
-    sw.rows.forEach(function(r,i){
-      var key=String(r.v.B||'').trim();
-      if(!key)return;
-      var rn=map[key];
-      if(rn==null){rn=3+i;map[key]=rn;last=Math.max(last,rn)}
-      plan.push({key:key,rn:rn,r:r});
-    });
-  }
+  var pl=swMakePlan(sc,sw.rows);
+  var plan=pl.plan,dropped=pl.dropped;
   if(!plan.length)return {rows:0,keys:[],dropped:dropped};
   var firstRow=plan[0].rn, lastRow=plan[plan.length-1].rn;
   /* the row above the block is only a separator now -> thin */
@@ -4033,6 +4046,83 @@ function swWriteRows(ws,X){
   return {rows:plan.length,keys:plan.map(function(p){return p.key}),
           from:firstBag,to:SW_MAXBAG,dropped:dropped,
           bags:plan[0].key+'..'+plan[plan.length-1].key};
+}
+/* where do the rows of this shift go? The sheet of the day tells us:
+   - this shift is already in the sheet: the same rows again (never a copy)
+   - the earlier shifts are in the sheet: the rows of this shift start right
+     after the last row that has a result, the bag numbers carry on
+   - the sheet has no result yet: the rows keep their own place */
+function swMakePlan(sc,rows){
+  var br=swBounds(CUR),plan=[],dropped=0;
+  if(sc.mine.length){
+    /* this shift is already in the sheet: the same rows, in their own place.
+       The bag of the factory is kept - we only fill the empty cells. */
+    var lastMine=sc.mine[sc.mine.length-1];
+    rows.forEach(function(r,i){
+      var rn,key;
+      if(i<sc.mine.length){rn=sc.mine[i].rn;key=sc.mine[i].key||('B'+(lastMine.no+i-sc.mine.length+1))}
+      else{rn=lastMine.rn+1+(i-sc.mine.length);key=String(r.v.B||'').trim()||('B'+(lastMine.no+1+(i-sc.mine.length)))}
+      plan.push({key:key,rn:rn,r:r});
+    });
+  }else if(sc.prevEnd>0){
+    /* the earlier shifts are in the sheet: the rows of this shift come after
+       them. The bag of every row is the bag of the reading - the numbers of
+       the day are absolute, not counted. A bag that already has an empty row
+       in the sheet goes into that row, the others go after the last row. */
+    var taken={},nextRow=Math.max(sc.last,sc.prevEnd)+1;
+    rows.forEach(function(r,i){
+      var key=String(r.v.B||'').trim();
+      if(!key)return;
+      var bno=swBagNo(key,0);
+      if(bno>SW_MAXBAG){dropped++;return}        /* the day ends at B200 */
+      var rn=sc.map[key];
+      if(rn!=null&&!taken[rn]&&!sc.busy[rn])rn=rn;   /* the empty row of the factory */
+      else rn=nextRow++;
+      taken[rn]=1;
+      plan.push({key:key,rn:rn,r:r});
+    });
+  }else{
+    /* the sheet has no result yet: the rows keep their own place */
+    rows.forEach(function(r,i){
+      var key=String(r.v.B||'').trim();
+      if(!key)return;
+      var rn=sc.map[key];
+      if(rn==null){rn=3+i;sc.map[key]=rn}
+      plan.push({key:key,rn:rn,r:r});
+    });
+  }
+  return {plan:plan,dropped:dropped};
+}
+/* the rows of this shift as they go into the file: only our own rows, with
+   the border of our block (thick on the outside, thin inside) - the rows of
+   the earlier shifts are not touched at all */
+function swPlanWrites(sc,plan){
+  var writes=[],base=(sc.last>2?sc.last:3),n=plan.length;
+  plan.forEach(function(p,i){
+    var vals={},red={},bd={};
+    SCOLS.forEach(function(c){
+      var val=p.r.v[c.k];
+      if(c.k==='B')val=p.key;
+      if(c.k==='C')val=dtxt(curISO(),'dmy');
+      if(val===undefined||val===null||val==='')vals[c.k]=null;
+      else if(typeof val==='number')vals[c.k]=val;
+      else if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))vals[c.k]=parseFloat(val);
+      else vals[c.k]=String(val);
+      if(p.r.red&&p.r.red[c.k])red[c.k]=1;
+    });
+    vals.A=swBagNo(p.key,p.rn);                /* the numbering on the left */
+    /* the border of our block: the outside is thick, the inside is thin */
+    for(var cn=2;cn<=11;cn++){
+      var spec={};
+      if(cn===2)spec.left='medium';
+      if(cn===11)spec.right='medium';
+      spec.top=(i===0)?'medium':'thin';
+      spec.bottom=(i===n-1)?'medium':'thin';
+      bd[colL(cn-1)]=spec;
+    }
+    writes.push({row:p.rn,vals:vals,red:red,ref:base,bd:bd});
+  });
+  return writes;
 }
 function swFillSelect(){
   var sel=document.getElementById('swSheet'); if(!sel||!swBook)return;
@@ -4124,12 +4214,48 @@ async function swOpenWrite(){
   swStatus('✅ '+swName+' is open — writing now…');
   await swWrite();
 }
-/* is this really a Swing sheet? (the header of column B says so) */
+/* is this really a Swing sheet? The header says so: "No." in the first
+   column and "Shift" in the last one. An empty sheet may be used as well. */
+/* does the sheet have a header (something in the first three rows)? */
+function swHasHeader(ws){
+  var hit=false;
+  for(var r=1;r<=3&&!hit;r++)
+    for(var c=1;c<=11&&!hit;c++){
+      var v=ws.getCell(r,c).value;
+      if(v!=null&&String(v).trim()!=='')hit=true;
+    }
+  return hit;
+}
+/* does the sheet have any row with something in it? */
+function swHasAnyRow(ws){
+  var hit=false;
+  if(ws&&ws.eachRow)ws.eachRow({includeEmpty:false},function(row,rn){
+    if(hit||rn<=2)return;
+    row.eachCell({includeEmpty:false},function(cell,cn){
+      if(hit)return;
+      var v=cell.value;
+      if(v!=null&&String(v).trim()!=='')hit=true;
+    });
+  });
+  return hit;
+}
 function swIsSwingSheet(ws){
   if(!ws)return false;
-  var h=ws.getCell(1,2).value;
-  if(h==null||String(h).trim()==='')return true;      /* an empty sheet: we may use it */
-  return String(h).trim().toLowerCase()==='no.';
+  /* the header of the factory: "No." in the first column and "Shift" in the
+     last one - in the first three rows (the sheet of the day may have a title
+     above it). The In Process sheet of the day has no such header - it must
+     never be taken for a Swing sheet. */
+  for(var r=1;r<=3;r++){
+    var b=ws.getCell(r,2).value, k=ws.getCell(r,11).value;
+    if(b==null||k==null)continue;
+    if(String(b).trim().toLowerCase()==='no.'&&String(k).trim().toLowerCase()==='shift')return true;
+  }
+  /* no header at all: the bags of the day say it (B12, B13 ...) */
+  for(var r2=3;r2<=40;r2++){
+    var v=ws.getCell(r2,2).value;
+    if(v!=null&&/^b\s*\d+$/i.test(String(v).trim()))return true;
+  }
+  return false;
 }
 async function swWrite(){
   if(!swBook){swStatus('Open your workbook first.',true);return}
@@ -4169,34 +4295,46 @@ async function swWrite(){
       if(ex){ws=ex;how='existing';name=nm}
       else{how='created';name=nm}    /* it is built in a scratch workbook below */
     }
+    /* the sheet of the day is there but still empty (the factory made it and
+       nobody wrote in it yet): the header and the rows go into it */
+    var emptySheet=false;
+    if(how==='existing')emptySheet=!swHasAnyRow(ws);
     /* never write into a sheet that is not a Swing sheet */
-    if(how==='existing'&&!swIsSwingSheet(ws)){
+    if(how==='existing'&&!emptySheet&&!swIsSwingSheet(ws)){
       swStatus('⚠ The sheet "'+name+'" is not a Swing sheet (its first column says "'+
         String(ws.getCell(1,2).value||'')+'"). Pick the sheet of the day in the list above.',true);
       return;
     }
     var X=xs();
     var res,buf;
-    if(how==='created'){
-      /* the sheet of the day is new: it is built in a scratch workbook and
-         then put into the file - the rest of the workbook is not touched */
+    if(how==='created'||emptySheet){
+      /* the sheet of the day is new (or empty): it is built in a scratch
+         workbook and then put into the file - the rest of the workbook is not
+         touched. An empty sheet of the day is filled, not replaced by a new one */
       var scratch=new ExcelJS.Workbook();
       var sws=swCreateSheet(scratch,name);
       res=swWriteRows(sws,X);
       if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
       var sb=await scratch.xlsx.writeBuffer();
       if(!raw)throw new Error('the file could not be read again');
-      buf=await ipAddSheetFromWorkbook(raw,sb,name,name);
+      buf=await ipAddSheetFromWorkbook(raw,sb,name,name,emptySheet);
       /* the sheet of the day must really be there with its rows */
       var chk=await ipVerifyWritten(buf,name,res.rows);
       if(!chk.ok)throw new Error(chk.msg);
     } else {
-      res=swWriteRows(ws,X);
-      if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
+      /* the sheet of the factory: only the rows of THIS shift go into the file -
+         the rows of the earlier shifts keep their values and their format */
+      var sc2=swScanSheet(ws);
+      var swr2=swingRows(registeredRows(hourData()),X);
+      var pl2=swMakePlan(sc2,swr2.rows);
+      if(!pl2.plan.length){swStatus('Nothing to write in this shift.',true);return}
+      var wr=swPlanWrites(sc2,pl2.plan);
+      res={rows:pl2.plan.length,keys:pl2.plan.map(function(p){return p.key}),
+           from:pl2.plan[0].key,to:pl2.plan[pl2.plan.length-1].key,dropped:pl2.dropped,
+           bags:pl2.plan[0].key+'..'+pl2.plan[pl2.plan.length-1].key};
       if(!raw)throw new Error('the file could not be read again');
-      /* ONLY our rows go into the file - the format of the workbook stays as it is */
-      buf=await ipSurgicalWrite(raw,name,swCollect(ws),3);
-      var chk2=await ipVerifyWritten(buf,name,res.rows);
+      buf=await ipSurgicalWrite(raw,name,wr,(sc2.last>2?sc2.last:3));
+      var chk2=await ipVerifyWritten(buf,name,res.rows,res.keys);
       if(!chk2.ok)throw new Error(chk2.msg);
     }
     if(swHandle){
