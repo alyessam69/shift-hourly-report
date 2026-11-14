@@ -3714,11 +3714,11 @@ var swBook=null, swHandle=null, swName='', swFresh=false, swRaw=null;
 
 /* the name of a new sheet: "Swing Noodles 9-11-2026" */
 /* the name of the sheet of the day - the way the factory names its sheets:
-   the product and then the day: "(85-15) 14.11.2026" */
+   the day first and then the product: "14.11.2026 (85-15)" */
 function swDefaultName(){
   var p=String(curISO()).split('-');
   var d=(''+(+p[2])).replace(/^0/,'')+'.'+(''+(+p[1])).replace(/^0/,'')+'.'+p[0];
-  return '(85-15) '+d;
+  return d+' (85-15)';
 }
 function swNewName(){
   var el=document.getElementById('swNewName');
@@ -4086,6 +4086,13 @@ async function swOpenWrite(){
   swStatus('✅ '+swName+' is open — writing now…');
   await swWrite();
 }
+/* is this really a Swing sheet? (the header of column B says so) */
+function swIsSwingSheet(ws){
+  if(!ws)return false;
+  var h=ws.getCell(1,2).value;
+  if(h==null||String(h).trim()==='')return true;      /* an empty sheet: we may use it */
+  return String(h).trim().toLowerCase()==='no.';
+}
 async function swWrite(){
   if(!swBook){swStatus('Open your workbook first.',true);return}
   try{
@@ -4123,6 +4130,12 @@ async function swWrite(){
       var ex=book.getWorksheet(nm);
       if(ex){ws=ex;how='existing';name=nm}
       else{how='created';name=nm}    /* it is built in a scratch workbook below */
+    }
+    /* never write into a sheet that is not a Swing sheet */
+    if(how==='existing'&&!swIsSwingSheet(ws)){
+      swStatus('⚠ The sheet "'+name+'" is not a Swing sheet (its first column says "'+
+        String(ws.getCell(1,2).value||'')+'"). Pick the sheet of the day in the list above.',true);
+      return;
     }
     var X=xs();
     var res,buf;
