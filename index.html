@@ -877,6 +877,8 @@ body.soapbg .ctl{color:var(--mut)}
 .ipbox button:hover{background:var(--acc);color:#fff}
 .ipbox select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink);max-width:280px}
 .ipbox .hint{padding:0}
+.ipbox .opt{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);cursor:pointer;user-select:none}
+.ipbox .opt input{padding:0;width:auto;height:auto;margin:0;accent-color:var(--acc);cursor:pointer}
 #ipPlan{margin-top:8px;font-size:12.5px;line-height:1.7;color:var(--mut)}
 #ipPlan b{color:var(--ink)}
 #ipNote{margin-top:6px;font-size:12px;line-height:1.6}
@@ -2716,6 +2718,8 @@ var BOX='<div class="ipbox">'
  +'<button id="ipOpen" type="button">Open only</button>'
  +'<button id="ipWrite" type="button">Write into the file</button>'
  +'<label id="ipSheetLab" hidden>Sheet <select id="ipSheet"></select></label>'
+ +'<label class="opt" title="The rows go into a NEW sheet (a copy of the sheet of the factory). The sheets you already have stay exactly as they are.">'
+ +'<input type="checkbox" id="ipNewSheet"> 📄 New sheet &mdash; my sheets stay untouched</label>'
  +'<span class="hint" id="ipStatus" style="padding:0"></span>'
  +'</div><div id="ipPlan"></div><div id="ipNote"></div></div>';
 function ensure(){
@@ -2910,6 +2914,26 @@ async function ipZipClose(z){
   out.set(new Uint8Array(e.buffer),o);
   return out;
 }
+/* is the option "write into a new sheet" on? */
+function ipNewSheetOn(){
+  var e=document.getElementById('ipNewSheet');
+  return !!(e&&e.checked);
+}
+/* the name of the sheet of today: the same product, the day of today
+   ("PKOL(85-15) 30-10-2026" -> "PKOL(85-15) 14-11-2026") */
+function ipTodaySheetName(src){
+  var t=String(curISO()).split('-');
+  var day=(''+(+t[2])).replace(/^0/,'')+'-'+(''+(+t[1])).replace(/^0/,'')+'-'+t[0];
+  var m=/^(.*?)(\d{1,2}-\d{1,2}-\d{4})(\s*)$/.exec(src||'');
+  if(m)return m[1]+day+m[3];
+  return (src||'PKOL')+' '+day;
+}
+/* a sheet of the workbook by its name */
+function ipFindSheetByName(book,name){
+  var list=(book&&book.worksheets)||[];
+  for(var i=0;i<list.length;i++)if(list[i].name===name)return list[i];
+  return null;
+}
 /* which xml part is the sheet with that name? */
 function ipSheetPath(z,name){
   var dec=new TextDecoder();
@@ -3034,6 +3058,11 @@ async function ipSurgicalWrite(raw,sheetName,writes,refRow){
   var path=ipSheetPath(z,sheetName);
   if(!path)throw new Error('the sheet "'+sheetName+'" was not found inside the file');
   var xml=new TextDecoder().decode(z.data[path]);
+  z.data[path]=new TextEncoder().encode(ipApplyWrites(z,xml,writes,refRow));
+  return await ipZipClose(z);
+}
+/* put our rows into the xml of a sheet - nothing else of the sheet changes */
+function ipApplyWrites(z,xml,writes,refRow){
   var ref=ipFindRow(xml,refRow);
   if(!ref)throw new Error('the reference row of the sheet was not found');
   var refCols=Object.keys(ref.cells);
@@ -3069,7 +3098,49 @@ async function ipSurgicalWrite(raw,sheetName,writes,refRow){
     if(ex)xml=xml.slice(0,ex.start)+rowXml+xml.slice(ex.end);
     else xml=ipInsertRow(xml,rowXml,r);
   }
-  z.data[path]=new TextEncoder().encode(xml);
+  return xml;
+}
+/* a NEW sheet: a copy of the sheet of the factory with our rows in it.
+   The sheets of the factory are not touched at all. */
+async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow){
+  var z=await ipZipOpen(raw);
+  var srcPath=ipSheetPath(z,srcName);
+  if(!srcPath)throw new Error('the sheet "'+srcName+'" was not found inside the file');
+  var xml=new TextDecoder().decode(z.data[srcPath]);
+  xml=ipApplyWrites(z,xml,writes,refRow);
+  /* a free name for the new part */
+  var n=1,part,base='';
+  while(true){
+    part='xl/worksheets/sheet'+(900+n)+'.xml';
+    if(!z.data[part])break;
+    n++;
+  }
+  base='sheet'+(900+n)+'.xml';
+  z.data[part]=new TextEncoder().encode(xml);
+  z.order.push(part);              /* the new part must be in the list of the zip */
+  /* the printer settings of the copy (the same rels file) */
+  var srcRels='xl/worksheets/_rels/'+srcPath.split('/').pop()+'.rels';
+  if(z.data[srcRels]){
+    var newRels='xl/worksheets/_rels/'+base+'.rels';
+    z.data[newRels]=z.data[srcRels];
+    z.order.push(newRels);
+  }
+  /* the new sheet in the book */
+  var wb=new TextDecoder().decode(z.data['xl/workbook.xml']);
+  var rels=new TextDecoder().decode(z.data['xl/_rels/workbook.xml.rels']);
+  var maxId=0,m,mx=/sheetId="(\d+)"/g;
+  while((m=mx.exec(wb))!==null)maxId=Math.max(maxId,+m[1]);
+  var maxRid=0,m2,mr=/Id="rId(\d+)"/g;
+  while((m2=mr.exec(rels))!==null)maxRid=Math.max(maxRid,+m2[1]);
+  var rid='rId'+(maxRid+1);
+  var tag='<sheet name="'+ipXmlEsc(newName)+'" sheetId="'+(maxId+1)+'" r:id="'+rid+'"/>';
+  z.data['xl/workbook.xml']=new TextEncoder().encode(wb.replace('</sheets>',tag+'</sheets>'));
+  var relTag='<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/'+base+'"/>';
+  z.data['xl/_rels/workbook.xml.rels']=new TextEncoder().encode(rels.replace('</Relationships>',relTag+'</Relationships>'));
+  /* and the type of the new part */
+  var ct=new TextDecoder().decode(z.data['[Content_Types].xml']);
+  var ov='<Override PartName="/'+part+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+  z.data['[Content_Types].xml']=new TextEncoder().encode(ct.replace('</Types>',ov+'</Types>'));
   return await ipZipClose(z);
 }
 /* write the hours of the shift into the sheet */
@@ -3271,7 +3342,10 @@ function ipPlan(){
     return;
   }
   var nm=t.name;
-  el.innerHTML='<b>📥 '+n+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · the PKOL sheet with the newest data'+
+  var where=ipNewSheetOn()
+    ? 'a NEW sheet ('+ipTodaySheetName(t.name).replace(/</g,'&lt;')+') — your sheets stay untouched'
+    : 'the PKOL sheet with the newest data';
+  el.innerHTML='<b>📥 '+n+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+where+
     ' · shift '+CUR+' · the hours '+hourData().map(function(d){return pad(d.h)}).join(',')+' · date '+curDMY();
 }
 async function ipLoad(){
@@ -3353,12 +3427,26 @@ async function ipWrite(){
       ipStatus('⚠ No PKOL sheet was found in this workbook (Sheet1 is never used).',true);
       return;
     }
+    /* the option: the rows go into a NEW sheet - the sheets of the factory
+       are not touched at all */
+    var newMode=ipNewSheetOn(), todayName='', existed=null;
+    if(newMode){
+      todayName=ipTodaySheetName(name);
+      existed=ipFindSheetByName(book,todayName);
+      if(existed){ws=existed;name=todayName}   /* the sheet of today is already there -> fill it */
+    }
     var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
     var res=ipWriteHours(ws,data,X);
     if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
     if(!raw)throw new Error('the file could not be read again');
     /* ONLY our rows go into the file - the format of the workbook stays as it is */
-    var buf=await ipSurgicalWrite(raw,name,res.writes,res.ref);
+    var buf;
+    if(newMode&&!existed){
+      buf=await ipCreateSheetWrite(raw,name,todayName,res.writes,res.ref);
+      name=todayName;
+    } else {
+      buf=await ipSurgicalWrite(raw,name,res.writes,res.ref);
+    }
     if(ipHandle){
       var w=await ipHandle.createWritable();
       await w.write(buf); await w.close();
@@ -3371,7 +3459,7 @@ async function ipWrite(){
     }
     ipFillSelect(); ipPlan();
     ipStatus((ipHandle?'✅ ':'⬇️ ')+res.rows.length+' hour(s) ('+res.hours+') written to '+name+
-      ' — the PKOL sheet with the newest data (no sheet was created)'+
+      (newMode?' — a NEW sheet: the sheets of the factory were not touched.':' — the PKOL sheet with the newest data (no sheet was created)')+
       (ipHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
     ipStatus('ERROR: '+e.message,true);
@@ -3382,6 +3470,8 @@ function ipBind(){
   b('ipOpenWrite',ipOpenWrite); b('ipOpen',ipOpen); b('ipWrite',ipWrite);
   var sel=document.getElementById('ipSheet');
   if(sel)sel.onchange=function(){ipPlan()};
+  var opt=document.getElementById('ipNewSheet');
+  if(opt)opt.onchange=function(){ipPlan()};
 }
 
 </script>
