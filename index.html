@@ -2567,7 +2567,7 @@ function xlBlockBorder(isFirst,isLast,c){
 function xlWriteRow(writes,r,v,tmpl,isFirst,isLast,refs){
   var letters=['B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
   var ref=(isFirst&&refs.start)?refs.start:((isLast&&refs.end)?refs.end:(refs.mid||refs.start));
-  var w={row:r,vals:{},red:{},fmt:{},ref:ref||tmpl.ref};
+  var w={row:r,vals:{},red:{},fmt:{},ref:ref||tmpl.ref,edge:'R'};
   letters.forEach(function(L){
     var val=v.v[L];
     if(L==='B'){
@@ -3029,11 +3029,12 @@ function ipCellXml(col,r,s,val){
    format of the file itself never changes, we only add what we need. */
 function ipRedStyle(z,baseS,opt){
   opt=opt||{};
-  if(!opt.red&&!opt.numFmt)return baseS;
+  if(!opt.red&&!opt.numFmt&&!opt.border)return baseS;
   var key='xl/styles.xml';
   var xml=new TextDecoder().decode(z.data[key]||new Uint8Array(0));
   var fm=/<fonts([^>]*)>([\s\S]*?)<\/fonts>/.exec(xml);
   var xm=/<cellXfs([^>]*)>([\s\S]*?)<\/cellXfs>/.exec(xml);
+  var bm=/<borders([^>]*)>([\s\S]*?)<\/borders>/.exec(xml);
   if(!fm||!xm)return null;
   var fonts=fm[2].match(/<font\b[^>]*>[\s\S]*?<\/font>|<font\b[^>]*\/>/g)||[];
   var xfs=xm[2].match(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g)||[];
@@ -3076,15 +3077,49 @@ function ipRedStyle(z,baseS,opt){
     }
   }
   var wantNumId=(wantNum!==null)?wantNum:+bNum;
+  /* the border we want: the sides we change, the rest of the border stays */
+  var wantBorderId=+bBorder;
+  if(opt.border){
+    var bl=bm?bm[2].match(/<border\b[^>]*>[\s\S]*?<\/border>|<border\b[^>]*\/>/g)||[]:[];
+    var bXml=bl[+bBorder]||'';
+    var sides=['left','right','top','bottom'],o={},w={};
+    for(i=0;i<sides.length;i++){
+      var mm=new RegExp('<'+sides[i]+'[^>]*style="([^"]+)"').exec(bXml);
+      o[sides[i]]=mm?mm[1]:null;
+      w[sides[i]]=(opt.border&&opt.border[sides[i]])?opt.border[sides[i]]:o[sides[i]];
+    }
+    var nb='<border>'+
+      '<left style="'+(w.left||'thin')+'" color="FF000000"/>'+
+      '<right style="'+(w.right||'thin')+'" color="FF000000"/>'+
+      '<top style="'+(w.top||'thin')+'" color="FF000000"/>'+
+      '<bottom style="'+(w.bottom||'thin')+'" color="FF000000"/>'+
+      '<diagonal/></border>';
+    wantBorderId=-1;
+    for(i=0;i<bl.length;i++)if(bl[i]===nb){wantBorderId=i;break}
+    if(wantBorderId<0){
+      if(!bm)return null;
+      var bCount=(/count="(\d+)"/.exec(bm[1])||[0,bl.length])[1];
+      var bNew=bCount+'';
+      var bAttr=bm[1].replace(/count="\d+"/,function(){return 'count="'+(+bCount+1)+'"'});
+      xml=xml.replace(bm[0],function(){return '<borders'+bAttr+'>'+bm[2]+nb+'</borders>'});
+      wantBorderId=bl.length;
+      bm=/<borders([^>]*)>([\s\S]*?)<\/borders>/.exec(xml);
+      xm=/<cellXfs([^>]*)>([\s\S]*?)<\/cellXfs>/.exec(xml);
+      fm=/<fonts([^>]*)>([\s\S]*?)<\/fonts>/.exec(xml);
+      xfs=xm[2].match(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g)||[];
+      fonts=fm[2].match(/<font\b[^>]*>[\s\S]*?<\/font>|<font\b[^>]*\/>/g)||[];
+    }
+  }
   for(i=0;i<xfs.length;i++){           /* is there a twin of that cell? */
     var x=xfs[i];
     if(+at(x,/fontId="(\d+)"/,'0')!==wantFont)continue;
     if(+at(x,/numFmtId="(\d+)"/,'0')!==wantNumId)continue;
-    if(at(x,/borderId="(\d+)"/,'0')!==bBorder)continue;
+    if(+at(x,/borderId="(\d+)"/,'0')!==wantBorderId)continue;
     if(at(x,/fillId="(\d+)"/,'0')!==bFill)continue;
     if((/<alignment[^>]*\/>/.exec(x)||[''])[0]!==bAl)continue;
     return i;
   }
+  if(wantBorderId!==+bBorder)base=base.replace(/borderId="\d+"/,'borderId="'+wantBorderId+'"');
   var newFontId=wantFont;
   var newXfs=base;
   if(newFontId!==+bFont)newXfs=newXfs.replace(/fontId="\d+"/,'fontId="'+newFontId+'"');
@@ -3272,6 +3307,7 @@ function ipApplyWrites(z,xml,writes,refRow){
     for(vk2=0;vk2<rk2.length;vk2++){if(w.red[rk2[vk2]])byRow[w.row].red[rk2[vk2]]=1}
     if(w.fmt)byRow[w.row].fmt=w.fmt;
     if(w.ref)byRow[w.row].ref=w.ref;
+    if(w.edge)byRow[w.row].edge=w.edge;
     if(w.thick)byRow[w.row].thick=1;
   }
   var rows=Object.keys(byRow);
@@ -3290,6 +3326,8 @@ function ipApplyWrites(z,xml,writes,refRow){
       if(Object.prototype.hasOwnProperty.call(bw.vals,col)){
         if(bw.red[col]){var rs=ipRedStyle(z,+s,{red:true});if(rs!==null&&rs!==undefined)s=String(rs)}
         if(bw.fmt&&bw.fmt[col]){var fs=ipRedStyle(z,+s,{numFmt:bw.fmt[col]});if(fs!==null&&fs!==undefined)s=String(fs)}
+        /* the outside of our block is thick - the right edge of the last column */
+        if(bw.edge&&col===bw.edge){var bs=ipRedStyle(z,+s,{border:{right:'medium'}});if(bs!==null&&bs!==undefined)s=String(bs)}
         cells.push(ipCellXml(col,r,s,bw.vals[col]));
       }else{
         cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
@@ -3373,7 +3411,7 @@ function ipWriteHours(ws,data,X){
     }
     /* only the DATA is collected here - the format of the rows comes from the
        file itself (the reference row of the factory) */
-    var w={row:r,h:h,vals:{},red:{}};
+    var w={row:r,h:h,vals:{},red:{},edge:'Q'};
     for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
       var L=String.fromCharCode(64+c);
       var val=v.v[L];
