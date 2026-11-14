@@ -878,6 +878,14 @@ body.soapbg .ctl{color:var(--mut)}
 .ipbox select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink);max-width:280px}
 .ipbox .hint{padding:0}
 .ipbox .opt{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);cursor:pointer;user-select:none}
+/* the quick copy bar: one chip per hour of the shift */
+.qc{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.qc span{font-weight:600;color:var(--ink);margin-right:4px}
+.qc button{min-width:64px;padding:10px 10px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:9px;font-size:14px;font-weight:600;cursor:pointer}
+.qc button.f{border-color:var(--acc);color:var(--acc)}
+.qc button.nx{border:2px dashed var(--acc);color:var(--ink)}
+.qc button.ok{background:#2e7d32;border-color:#2e7d32;color:#fff}
+.qc .all{border-color:var(--acc);color:var(--acc)}
 .ipbox .opt input{padding:0;width:auto;height:auto;margin:0;accent-color:var(--acc);cursor:pointer}
 #ipPlan{margin-top:8px;font-size:12.5px;line-height:1.7;color:var(--mut)}
 #ipPlan b{color:var(--ink)}
@@ -1476,7 +1484,7 @@ function build(key){
  CUR=key;var m=document.getElementById('main');
  var sq=document.getElementById('soapqc');if(sq){sq.hidden=true;sq.style.display=''}
  m.classList.remove('wide');if(document.body)document.body.classList.remove('soapbg');
- m.innerHTML='';m.appendChild(expBar());
+ m.innerHTML='';m.appendChild(expBar());m.appendChild(quickBar());
  var hrs=SH[key],saved=load()[key]||{};
  hrs.forEach(function(h,i){
   var samp=(i===0||i===3),sv=saved[h];
@@ -1502,6 +1510,7 @@ function build(key){
   card.querySelector('.cp').onclick=function(e){copyBlk(card.querySelector('.blk'),e.target)};
  });
  applySize();
+ updateChips();
  buildSummary(m);
  var cl=document.createElement('button');cl.className='clr';cl.textContent='Clear all values in this shift';
  var armed=false;
@@ -1534,6 +1543,54 @@ function applySize(){var v=xs().size||'std',f=sizeF();
  [].forEach.call(document.querySelectorAll('.sz'),function(x){x.value=v});
  [].forEach.call(document.querySelectorAll('.card .scroll'),function(x){x.style.zoom=f})}
 document.addEventListener('change',function(e){var t=e.target;if(t.classList&&t.classList.contains('sz')){putX(function(o){o.size=t.value});applySize()}});
+/* ---------- Quick copy: one tap per hour, then paste it in your reply ---------- */
+function hourCards(){return [].slice.call(document.querySelectorAll('.card')).filter(function(c){return c._h!=null&&c.querySelector('.blk')})}
+function hourFilled(c){var cs=c.querySelectorAll('.blk td[contenteditable]');return cs.length>3&&(cellTxt(cs[0])!==''||cellTxt(cs[3])!=='')}
+function quickBar(){
+ var d=document.createElement('div');d.className='qc';d.id='qc';
+ var h='<span>Quick copy \u2013 tap an hour, then paste in your reply</span>';
+ (SH[CUR]||[]).forEach(function(x){h+='<button type="button" data-h="'+x+'">'+pad(x)+'</button>'});
+ h+='<button type="button" class="all" data-h="all">All hours</button>';
+ d.innerHTML=h;
+ [].forEach.call(d.querySelectorAll('button'),function(b){b.onclick=function(){quickCopy(b)}});
+ return d;
+}
+/* the chips show which hours are already filled and which one comes next */
+function updateChips(){
+ var bar=document.getElementById('qc');if(!bar)return;
+ var cards=hourCards(),nxt=-1,i;
+ for(i=0;i<cards.length;i++){if(!hourFilled(cards[i])){nxt=i;break}}
+ [].forEach.call(bar.querySelectorAll('button[data-h]'),function(b){
+  var c=null;cards.forEach(function(x){if(String(x._h)===b.getAttribute('data-h'))c=x});
+  var idx=cards.indexOf(c),f=c&&hourFilled(c);
+  b.classList.toggle('f',!!f);b.classList.toggle('nx',!f&&idx===nxt);
+ });
+}
+/* copy one hour (or all of them) - the table for Outlook, the text for the chat */
+function quickCopy(btn){
+ var k=btn.getAttribute('data-h'),cards=hourCards(),sel=k==='all'?cards:cards.filter(function(c){return String(c._h)===k});
+ if(!sel.length){toast('Nothing to copy');return}
+ var html=[],txt=[];
+ sel.forEach(function(c){
+  var o=blkOut(c.querySelector('.blk'));
+  html.push(o.html);txt.push(o.txt);
+ });
+ var old=btn.textContent;
+ copyOut(html.join('<p style="margin:0;padding:0;line-height:18px">&nbsp;</p>'),txt.join('\n\n'),btn);
+ btn.textContent='Copied \u2713';btn.classList.add('ok');
+ setTimeout(function(){btn.textContent=old;btn.classList.remove('ok')},1800);
+ toast((k==='all'?'All hours':pad(+k))+' copied \u2013 paste it in your reply');
+}
+/* the block of a card, without the parts that must not be copied */
+function blkOut(blk){
+ var c=blk.cloneNode(true);
+ [].forEach.call(c.querySelectorAll('.nocopy'),function(x){x.parentNode.removeChild(x)});
+ c.querySelectorAll('[contenteditable]').forEach(function(x){x.removeAttribute('contenteditable')});
+ c.style.width='';
+ var nc=blk.querySelectorAll('.nocopy');[].forEach.call(nc,function(x){x.style.display='none'});
+ var txt=blk.innerText;[].forEach.call(nc,function(x){x.style.display=''});
+ return {html:olFix(scaleHtml(c.outerHTML,sizeF())),txt:txt};
+}
 function copyBlk(blk,btn){
  var c=blk.cloneNode(true);
  [].forEach.call(c.querySelectorAll('.nocopy'),function(x){x.parentNode.removeChild(x)});
@@ -3302,11 +3359,24 @@ async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName,replac
   return await ipZipClose(z);
 }
 /* put our rows into the xml of a sheet - nothing else of the sheet changes */
+/* the columns of the row, in the order of the sheet */
+function ipColOrder(cols){
+  return cols.slice().sort(function(a,b){
+    var na=0,nb=0,i;
+    for(i=0;i<a.length;i++)na=na*26+(a.charCodeAt(i)-64);
+    for(i=0;i<b.length;i++)nb=nb*26+(b.charCodeAt(i)-64);
+    return na-nb;
+  });
+}
+/* Put our rows into the xml of a sheet - nothing else of the sheet changes.
+   A row of the factory that we write into keeps EVERY cell we do not write:
+   the value AND the format of the factory. A cell we write takes the format
+   of the reference row of the factory (and the red / the number format / the
+   thick edge we ask for). */
 function ipApplyWrites(z,xml,writes,refRow){
   var ref=ipFindRow(xml,refRow);
   if(!ref)throw new Error('the reference row of the sheet was not found');
-  var refCols=Object.keys(ref.cells);
-  var byRow={},k;
+  var byRow={},k,maxRow=0;
   for(k=0;k<writes.length;k++){
     var w=writes[k];
     if(!byRow[w.row])byRow[w.row]={row:w.row,vals:{},red:{},thick:0};
@@ -3330,9 +3400,19 @@ function ipApplyWrites(z,xml,writes,refRow){
       var sr=ipFindRow(xml,bw.ref);
       if(sr)src=sr;
     }
+    /* the row that is already in the sheet - its cells we do not write stay */
+    var ex=ipFindRow(xml,r);
+    var keep=ex?ex.cells:{};
     var srcCols=Object.keys(src.cells);
-    for(ci=0;ci<srcCols.length;ci++){
-      var col=srcCols[ci],rc=src.cells[col],s=rc.s;
+    /* every column of the row: ours, the ones of the reference and the ones
+       the factory already has in this row */
+    var all={},ci2;
+    for(ci2=0;ci2<srcCols.length;ci2++)all[srcCols[ci2]]=1;
+    var keepCols=Object.keys(keep);
+    for(ci2=0;ci2<keepCols.length;ci2++)all[keepCols[ci2]]=1;
+    var cols=ipColOrder(Object.keys(all));
+    for(ci=0;ci<cols.length;ci++){
+      var col=cols[ci],rc=src.cells[col],s=rc?rc.s:'0';
       if(Object.prototype.hasOwnProperty.call(bw.vals,col)){
         if(bw.red[col]){var rs=ipRedStyle(z,+s,{red:true});if(rs!==null&&rs!==undefined)s=String(rs)}
         if(bw.fmt&&bw.fmt[col]){var fs=ipRedStyle(z,+s,{numFmt:bw.fmt[col]});if(fs!==null&&fs!==undefined)s=String(fs)}
@@ -3341,30 +3421,92 @@ function ipApplyWrites(z,xml,writes,refRow){
         /* the border of the block of the Swing sheet: the outside is thick */
         if(bw.bd&&bw.bd[col]){var b2=ipRedStyle(z,+s,{border:bw.bd[col]});if(b2!==null&&b2!==undefined)s=String(b2)}
         cells.push(ipCellXml(col,r,s,bw.vals[col]));
+      }else if(keep[col]){
+        /* a cell of the factory that we do not write: it stays exactly as it
+           is - the value AND the format */
+        cells.push(keep[col].xml);
       }else{
-        cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
+        /* a cell of the reference row that we do not write: it keeps the
+           format of the factory (an empty style is never written) */
+        if(rc&&rc.s)cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
       }
     }
     var extra=Object.keys(bw.vals);
     for(ci=0;ci<extra.length;ci++){
       var c2=extra[ci];
-      if(!src.cells[c2])cells.push(ipCellXml(c2,r,'0',bw.vals[c2]));
+      if(!all[c2])cells.push(ipCellXml(c2,r,'0',bw.vals[c2]));
     }
     var rowXml=ipRowAttrs(src.tag,r,bw.thick)+cells.join('')+'</row>';
-    var ex=ipFindRow(xml,r);
     if(ex)xml=xml.slice(0,ex.start)+rowXml+xml.slice(ex.end);
     else xml=ipInsertRow(xml,rowXml,r);
+    if(r>maxRow)maxRow=r;
   }
+  /* the sheet ends at the last row we wrote - not at the million rows of the
+     sheet we copied */
+  xml=xml.replace(/<dimension\s+ref="([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?"\s*\/>/,function(w,c1,r1,c2,r2){
+    var er=Math.max(maxRow,+(r2||r1));
+    return '<dimension ref="'+c1+r1+':'+(c2||c1)+er+'"/>';
+  });
   return xml;
 }
 var IP_RNS='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ';
-/* a NEW sheet: a copy of the sheet of the factory with our rows in it.
-   The sheets of the factory are not touched at all. */
-async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow){
+/* the rows of the source sheet we copy into the new sheet of the day:
+   the header (rows 1..9) and one row per hour of the day. The rows of the
+   OLD day are taken out - the new sheet holds the day, empty. */
+function ipNewSheetPlan(src){
+  var HR=9, hours=[], keep={};
+  /* the header always stays - even the rows of the header that are empty but
+     have a format (the title of the report) */
+  for(var i=1;i<=HR;i++)keep[i]=1;
+  src.eachRow({includeEmpty:false},function(row,rn){
+    if(rn<=HR)return;
+    var h=ipHourOfRow(src,rn);
+    if(h==null)return;
+    hours.push({rn:rn,h:h});
+    keep[rn]=1;
+  });
+  hours.sort(function(a,b){return a.h-b.h});
+  return {keep:keep,hours:hours,headerRow:HR};
+}
+/* the hours of a row of the In Process Report (the Time column) */
+function ipHourOfRow(ws,r){
+  var v=ws.getCell(r,3).value;
+  if(v==null||v==='')return null;
+  if(v instanceof Date)return v.getUTCHours();
+  if(typeof v==='number'){var h=Math.round(v*24);return (h>=0&&h<24)?h:null;}
+  var m=String(v).match(/(\d{1,2}):(\d{2})/);
+  return m?+m[1]:null;
+}
+/* a NEW sheet: the sheet of the factory COPIED, but with the rows of the old
+   day taken out - only the header and the hours of the day stay (empty, ready
+   for the shifts). The sheets of the factory are not touched at all. */
+async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow,dropRows){
   var z=await ipZipOpen(raw);
   var srcPath=ipSheetPath(z,srcName);
   if(!srcPath)throw new Error('the sheet "'+srcName+'" was not found inside the file');
   var xml=new TextDecoder().decode(z.data[srcPath]);
+  /* only the header and the rows of the hours of the day stay - the rows of
+     the old day and the empty rows at the end of the sheet go away */
+  if(dropRows){
+    var rowRe=/<row\b[^>]*?\/>|<row\b[^>]*?>[\s\S]*?<\/row>/g,m,kept='',lastRow=9;
+    while((m=rowRe.exec(xml))!==null){
+      var rn=+(/\br="(\d+)"/.exec(m[0])||[0,0])[1];
+      if(!dropRows[rn])continue;
+      kept+=m[0];
+      if(rn>lastRow)lastRow=rn;
+    }
+    xml=xml.replace(/(<sheetData\b[^>]*>)[\s\S]*?(<\/sheetData>)/,'$1'+kept+'$2');
+    /* the sheet ends at the last row of the day - not at the million empty
+       rows of the sheet we copied */
+    xml=xml.replace(/<dimension\s+ref="([^"]*)"\s*\/>/,function(w,ref){
+      var mm=/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(ref);
+      if(!mm)return w;
+      var c1=mm[1],r1=mm[2],c2=mm[3]||mm[1],r2=mm[4]||mm[2];
+      var nr=Math.min(+r2,lastRow);
+      if(nr<+r2)r2=nr;
+      return '<dimension ref="'+c1+r1+':'+c2+r2+'"/>';
+    });
+  }
   xml=ipApplyWrites(z,xml,writes,refRow);
   /* a free name for the new part */
   var n=1,part,base='';
@@ -3402,7 +3544,7 @@ async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow){
   return await ipZipClose(z);
 }
 /* write the hours of the shift into the sheet */
-function ipWriteHours(ws,data,X){
+function ipWriteHours(ws,data,X,byHour){
   var tmpl=ipRowTemplate(ws);      /* the clean format of the sheet */
   var map={},first=xlNextRow(ws,2,19);  /* the first free row - under the last row with data */
   var today=ipTodaySerial();
@@ -3417,7 +3559,10 @@ function ipWriteHours(ws,data,X){
     var v=vals('r',d,X);
     if(!v)return;
     var h=+d.h, key=today+'|'+h, r=map[key];
-    if(r==null){                     /* that hour of that day is not on the sheet yet -> add it */
+    if(byHour&&byHour[h]!=null){
+      /* the sheet of the day: the hour goes into the row of that hour */
+      r=byHour[h];
+    } else if(r==null){              /* that hour of that day is not on the sheet yet -> add it */
       r=first;
       first=r+1; map[key]=r;
     }
@@ -3694,13 +3839,33 @@ async function ipWrite(){
       if(existed){ws=existed;name=todayName}   /* the sheet of today is already there -> fill it */
     }
     var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
-    var res=ipWriteHours(ws,data,X);
+    /* the sheet of the day: the row of every hour of the day */
+    var plan=newMode&&!existed?ipNewSheetPlan(ws):null;
+    var byHour=null;
+    if(plan){
+      byHour={};
+      plan.hours.forEach(function(x){if(byHour[x.h]==null)byHour[x.h]=x.rn});
+    }
+    var res=ipWriteHours(ws,data,X,byHour);
     if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
     if(!raw)throw new Error('the file could not be read again');
     /* ONLY our rows go into the file - the format of the workbook stays as it is */
     var buf;
     if(newMode&&!existed){
-      buf=await ipCreateSheetWrite(raw,name,todayName,res.writes,res.ref);
+      /* a sheet of the day that is CLEAN: the header of the factory and the
+         hours of the day, empty. The rows of the old day are taken out. */
+      var emptyWrites=[];
+      plan.hours.forEach(function(x){
+        var w={row:x.rn,vals:{},red:{},ref:res.ref};
+        w.vals['B']=ipDMY(curISO());          /* the date of today */
+        w.vals['C']=xlSerialTime(x.h,0);      /* the hour of the row */
+        /* the results of the old day are cleared - the sheet is empty and
+           every shift puts its own numbers in its own rows */
+        for(var dc=5;dc<=19;dc++)w.vals[colL(dc-1)]=null;
+        emptyWrites.push(w);
+      });
+      var dayWrites=emptyWrites.concat(res.writes);
+      buf=await ipCreateSheetWrite(raw,name,todayName,dayWrites,res.ref,plan.keep);
       name=todayName;
     } else {
       buf=await ipSurgicalWrite(raw,name,res.writes,res.ref);
@@ -3932,6 +4097,24 @@ function swBagNo(key,fallback){
   var n=parseInt(String(key==null?'':key).replace(/[^0-9]/g,''),10);
   return isNaN(n)?(fallback-2):n;
 }
+/* the text of a cell: a cell of the factory can hold a rich text, a formula
+   with its result or a plain value - the bag number must be read out of all
+   of them */
+function swCellText(v){
+  if(v==null)return '';
+  if(typeof v==='object'){
+    if(v.richText)return v.richText.map(function(t){return t.text}).join('');
+    if(v.result!==undefined&&v.result!==null)return swCellText(v.result);
+    if(v.text!==undefined&&v.text!==null)return String(v.text);
+    return '';
+  }
+  return String(v);
+}
+/* the number of a bag: "B12" or "12" -> 12 */
+function swBagKeyNo(v){
+  var m=/^[A-Za-z]?\s*(\d{1,3})$/.exec(swCellText(v).trim());
+  return m?parseInt(m[1],10):0;
+}
 /* a row that a shift has filled: a result (Moisture / FA / Color / ...) or the
    shift letter in the last column. The rows of the numbering that have no
    result yet are NOT filled - they are the room of the next shift. */
@@ -3950,20 +4133,21 @@ function swRowShift(row){
   var k='';
   row.eachCell({includeEmpty:false},function(cell,cn){
     if(cn!==11)return;
-    var v=cell.value;
-    k=(v==null?'':String(v)).trim();
+    k=swCellText(cell.value).trim();
   });
   return k;
 }
 /* what is already in the sheet: the numbering, the rows of this shift and the
    end of the block of the earlier shifts */
 function swScanSheet(ws){
-  var map={},last=2,firstBag=0,mine=[],prevEnd=0,prevBag=0;
+  var map={},last=2,firstBag=0,mine=[],prevEnd=0,prevBag=0,lastData=0;
   ws.eachRow({includeEmpty:false},function(row,rn){
     if(rn<=2)return;
-    var b=row.getCell(2).value;
-    b=(b==null?'':String(b)).trim();
+    var b=swCellText(row.getCell(2).value).trim();
     if(b&&map[b]==null)map[b]=rn;
+    /* the last row that really holds the bags - the format of our rows comes
+       from a row like this, never from a stray row of the factory */
+    if(b&&/^B\d+$/i.test(b))lastData=rn;
     if(b){var bn=swBagNo(b,0); if(bn&&(!firstBag||bn<firstBag))firstBag=bn;}
     if(rn>last)last=rn;
     /* the rows of this shift (they are written again in their own place when
@@ -3979,7 +4163,8 @@ function swScanSheet(ws){
     if(rn<=2)return;
     if(swRowFilled(row)&&(!CUR||swRowShift(row)!==CUR))busy[rn]=1;
   });
-  return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag,busy:busy};
+  return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag,busy:busy,
+          lastData:lastData,refRow:(lastData>2?lastData:(last>2?last:3))};
 }
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
@@ -4097,7 +4282,7 @@ function swMakePlan(sc,rows){
    the border of our block (thick on the outside, thin inside) - the rows of
    the earlier shifts are not touched at all */
 function swPlanWrites(sc,plan){
-  var writes=[],base=(sc.last>2?sc.last:3),n=plan.length;
+  var writes=[],base=(sc.refRow>2?sc.refRow:(sc.last>2?sc.last:3)),n=plan.length;
   plan.forEach(function(p,i){
     var vals={},red={},bd={};
     SCOLS.forEach(function(c){
@@ -4333,7 +4518,7 @@ async function swWrite(){
            from:pl2.plan[0].key,to:pl2.plan[pl2.plan.length-1].key,dropped:pl2.dropped,
            bags:pl2.plan[0].key+'..'+pl2.plan[pl2.plan.length-1].key};
       if(!raw)throw new Error('the file could not be read again');
-      buf=await ipSurgicalWrite(raw,name,wr,(sc2.last>2?sc2.last:3));
+      buf=await ipSurgicalWrite(raw,name,wr,(sc2.refRow>2?sc2.refRow:(sc2.last>2?sc2.last:3)));
       var chk2=await ipVerifyWritten(buf,name,res.rows,res.keys);
       if(!chk2.ok)throw new Error(chk2.msg);
     }
