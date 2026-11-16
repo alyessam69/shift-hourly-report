@@ -85,6 +85,7 @@ main.wide{max-width:1400px}
 /* the Soap QC tab shows the calculator page, which is light-only -> force the
    light palette here even when the phone/computer is in dark mode */
 body.soapbg{overflow-x:hidden}
+body.soapbg #xlboxHost,body.soapbg #ipboxHost,body.soapbg #swboxHost{display:none!important}
 #soapqc{scroll-margin-top:76px}
 #soapPreview:empty{display:none}
 #soapPreview{margin:10px 0 14px;padding:10px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;font-size:13px;color:#1f2937}
@@ -1462,7 +1463,26 @@ function shf(){var o=xs().sh||{};function i(f,l,ph,dv){var v=(o[f]!==undefined&&
 function t3c(card,time){return shf()+t3(time)}
 function t3(time){return tbl('Plodder (<span class="t3ed" contenteditable="true" spellcheck="false" title="Tap to change the hour of this Plodder analysis">'+time+'</span>)','#2d4f70',SP3,['CL %','Gly%','EDTA%','TFM'],['','','',''])}
 function cellTxt(x){return x.textContent.replace(/\u00a0/g,'').trim()}
-function load(){try{return JSON.parse(sget(KEY))||{}}catch(e){return {}}}
+function load(){
+ try{
+  var all=JSON.parse(sget(KEY))||{};
+  ['A','B','C'].forEach(function(s){
+   var sh=all[s];if(!sh||typeof sh!=='object')return;
+   Object.keys(sh).forEach(function(h){
+    var rec=sh[h];if(!rec||!Array.isArray(rec.v))return;
+    var yv=String(rec.v[6]||'').trim();
+    if(yv&&!parseRY(yv)){
+     var yn=parseFloat(yv);
+     if(!isNaN(yn)&&yn>10){
+      if(!rec.v[7]||String(rec.v[7]).trim()==='')rec.v[7]=yv;
+      rec.v[6]='';
+     }
+    }
+   });
+  });
+  return all;
+ }catch(e){return {}}
+}
 function saveAll(){
  try{
   autoTfmCards();var all=load();var o={};
@@ -1525,7 +1545,7 @@ function build(key){
 document.addEventListener('focusin',function(e){var t=e.target;if(t.matches&&t.matches('td[contenteditable]')&&!t.closest('#sum')&&cellTxt(t)===''){t.innerHTML=''}});
 document.addEventListener('focusout',function(e){var t=e.target;if(t.matches&&t.matches('td[contenteditable]')&&!t.closest('#sum')&&cellTxt(t)===''){t.innerHTML='&nbsp;'}});
 document.addEventListener('input',function(e){var t=e.target;
- if(t.matches&&t.matches('.shf input')){var f=t.getAttribute('data-f');[].forEach.call(document.querySelectorAll('.shf input[data-f="'+f+'"]'),function(x){if(x!==t)x.value=t.value});putX(function(o){o.sh=o.sh||{};o.sh[f]=t.value});renderSummary();return}if(t.matches&&t.matches('td[contenteditable]')){
+ if(t.matches&&t.matches('.shf input')){var f=t.getAttribute('data-f');[].forEach.call(document.querySelectorAll('.shf input[data-f="'+f+'"]'),function(x){if(x!==t)x.value=t.value});putX(function(o){o.sh=o.sh||{};o.sh[f]=t.value;var pk=f==='iv'?'N':(f==='ti'?'O':(f==='col'?'P':''));if(pk&&o.ex){Object.keys(o.ex).forEach(function(h){if(o.ex[h]&&o.ex[h].p)delete o.ex[h].p[pk]})}if(f==='col'&&o.sw){Object.keys(o.sw).forEach(function(b){if(o.sw[b]){delete o.sw[b].G;delete o.sw[b].H}})}});renderSummary();return}if(t.matches&&t.matches('td[contenteditable]')){
  if(t.closest('#sum')){t.removeAttribute('data-auto');saveExtras()}
  else{var c=t.closest('.card');if(c){var cs=c.querySelectorAll('.blk td[contenteditable]');if(cs.length>=12&&cs[11]===t)c._tm=cellTxt(t)!==''}saveAll()}}});
 document.addEventListener('keydown',function(e){var t=e.target;if(e.key==='Enter'&&t.matches&&t.matches('.t3ed')){e.preventDefault();t.blur();return}if(e.key==='Enter'&&t.matches&&t.matches('td[contenteditable]')){e.preventDefault();t.blur()}});
@@ -1650,18 +1670,36 @@ function swBounds(shKey){
  tons=en-st+1;
  return{st:st,en:en,tons:tons};
 }
+function parseRY(raw){
+ var s=String(raw||'').trim();if(!s||s==='N/A')return null;
+ var mYFirst=s.match(/(\d+(?:\.\d+)?)\s*[yY]\s*[\/\-,\s]+\s*(\d+(?:\.\d+)?)\s*[rR]/);
+ if(mYFirst)return{r:parseFloat(mYFirst[2]),y:parseFloat(mYFirst[1]),rStr:mYFirst[2],yStr:mYFirst[1]};
+ var m=s.match(/(\d+(?:\.\d+)?)\s*[rR]?\s*\/\s*(\d+(?:\.\d+)?)\s*[yY]?/)||s.match(/(\d+(?:\.\d+)?)\s*[rR]\s+[\/,\-]?\s*(\d+(?:\.\d+)?)\s*[yY]/);
+ if(!m)return null;
+ return{r:parseFloat(m[1]),y:parseFloat(m[2]),rStr:m[1],yStr:m[2]};
+}
 function fmtSwCol(raw){
  var s=String(raw||'').trim();if(!s||s==='N/A')return '';
- var m=s.match(/(\d+(?:\.\d+)?)\s*[rR]?\s*\/\s*(\d+(?:\.\d+)?)\s*[yY]?/);
- return m?(m[1]+'/'+m[2]):s;
+ var p=parseRY(s);
+ return p?(p.rStr+'/'+p.yStr):s;
 }
 function calcTCol(raw){
- var s=String(raw||'').trim();if(!s||s==='N/A')return '';
- var m=s.match(/(\d+(?:\.\d+)?)\s*[rR]?\s*\/\s*(\d+(?:\.\d+)?)\s*[yY]?/);
- if(!m)return '';
- var r=parseFloat(m[1]),y=parseFloat(m[2]);
- if(isNaN(r)||isNaN(y))return '';
- return String(Math.round((y+5*r)*100)/100);
+ var p=parseRY(raw);
+ if(!p||isNaN(p.r)||isNaN(p.y))return '';
+ return String(Math.round((p.y+5*p.r)*100)/100);
+}
+function deriveRYFromTCol(tcolStr,fallbackCol){
+ var tc=parseFloat(String(tcolStr||'').trim());
+ if(isNaN(tc)||tc<=0)return fmtSwCol(fallbackCol||COLDEF);
+ var fb=calcTCol(fallbackCol||COLDEF);
+ if(fb!==''&&Math.abs(parseFloat(fb)-tc)<0.005)return fmtSwCol(fallbackCol||COLDEF);
+ var candR=[0.2,0.3,0.1,0.4,0.5],bestR=0.2,bestY=Math.round((tc-1.0)*100)/100;
+ for(var i=0;i<candR.length;i++){
+  var r=candR[i],y=Math.round((tc-5*r)*100)/100;
+  if(y>=0.8&&y<=2.2){bestR=r;bestY=y;break}
+ }
+ if(bestY<=0){bestR=Math.max(0.1,Math.floor((tc/6)*10)/10);bestY=Math.max(0.1,Math.round((tc-5*bestR)*100)/100)}
+ return bestR+'/'+bestY;
 }
 function swBucketMois(m0,tol,cnt,dir,R){
  var base=Math.round(m0*100),span=Math.max(1,Math.round(tol*100));
@@ -1708,10 +1746,26 @@ function swingRows(data,X){
  if(isNaN(tol)||tol<=0)tol=0.1;if(tol>0.1)tol=0.1;
  var swBias=tol/2; /* the Swing product is drier: its moisture is kept below the Plodder one */
  var SWM=0.05; /* and the average of the Swing sheet stays at least 0.05 % under the Plodder average */
- var inc1=(X.sw1!==undefined)?!!X.sw1:true;
+ var defInc1=(st===1||((st-1)%5!==0));
+ var inc1=(X.sw1!==undefined)?!!X.sw1:defInc1;
  var swEx=X.sw||{};
- var lastY5R='';
- data.forEach(function(d){if(d&&d.a&&d.a[6]&&d.a[6].trim()!=='')lastY5R=d.a[6].trim()});
+ var firstY5R='',firstExCol='';
+ data.forEach(function(d){
+  if(d&&d.a&&d.a[6]&&d.a[6].trim()!==''&&!firstY5R)firstY5R=d.a[6].trim();
+  var ep=(X.ex&&X.ex[d.h]&&X.ex[d.h].p)||{};
+  if(ep.P&&ep.P!=='N/A'&&ep.P.trim()!==''&&!firstExCol)firstExCol=ep.P.trim();
+ });
+ /* carry forward Y+5R and Plodder Color from the active/preceding sample hour */
+ var hrY5R={},hrCol={},curY5R=firstY5R,curCol=firstExCol;
+ data.forEach(function(d){
+  if(!d)return;
+  var yv=d.a&&d.a[6]?String(d.a[6]).trim():'';
+  if(yv)curY5R=yv;
+  var ep=(X.ex&&X.ex[d.h]&&X.ex[d.h].p)||{};
+  if(ep.P&&ep.P!=='N/A'&&String(ep.P).trim()!=='')curCol=String(ep.P).trim();
+  hrY5R[d.h]=curY5R;
+  hrCol[d.h]=curCol;
+ });
  /* the readings are taken every 5 tons: the first bag of the range, then
     every multiple of 5 (B1, B5, B10 ... for shift A - B57, B60, B65 ... when
     the range starts at B57) - the numbers are absolute, not counted from the
@@ -1720,7 +1774,7 @@ function swingRows(data,X){
  for(var n=st;n<=en;n++){
   if((n===st&&inc1)||(n%5===0))sampBags.push(n);
  }
- var active=data.filter(hasPlodderRow);
+ var active=data.filter(function(d){return d&&d.a&&num(d.a[3])!==null});
  var H=active.length,S=sampBags.length;
  var bagToHr={},hrBuckets={};
  if(H>0&&S>0){
@@ -1757,35 +1811,54 @@ function swingRows(data,X){
   var mVals=swBucketMois(m0-swBias,tol,bList.length,dir,R);
   for(var bi=0;bi<bList.length;bi++)bagMois[bList[bi]]=mVals[bi];
  }
- var rows=[];
+ var rows=[],sampFA={};
  for(var n2=st;n2<=en;n2++){
-  var v={B:'B'+n2,C:dtxt(curISO(),X.fmt),D:'',E:'',F:'',G:'',H:'',I:'Good ',J:'Good ',K:CUR},auto={I:1,J:1};
+  var v={B:'B'+n2,C:dtxt(curISO(),X.fmt),D:'',E:'',F:'',G:'',H:'',I:'Good ',J:'Good ',K:CUR},auto={D:1,E:1,F:1,G:1,H:1,I:1,J:1};
   var hI=bagToHr[n2];
-  if(hI!==undefined&&active[hI]){
+  if(hI!==undefined&&active[hI]&&bagMois[n2]!==undefined){
    var d2=active[hI];
    var ffa=(d2.a[4]==='N/A'?'':String(d2.a[4]||'').trim()),fa=(d2.a[5]==='N/A'?'':String(d2.a[5]||'').trim());
-   if(bagMois[n2]!==undefined){v.D=bagMois[n2];auto.D=1}
-   if(fa!==''){v.E=fa;auto.E=1}
-   if(ffa!==''){v.F=ffa;auto.F=1}
-   var exP=(X.ex&&X.ex[d2.h]&&X.ex[d2.h].p)||{};
-   var rawCol=(exP.P&&exP.P!=='N/A')?exP.P:((X.sh&&X.sh.col)||COLDEF);
+   v.D=bagMois[n2];
+   if(fa!==''){v.E=fa}
+   if(ffa!==''){v.F=ffa}
+   var cardY5R=String(d2.a[6]||'').trim()||hrY5R[d2.h]||'';
+   var shCol=(X.sh&&X.sh.col)?String(X.sh.col).trim():'';
+   var rawCol=hrCol[d2.h]||shCol||(parseRY(cardY5R)?cardY5R:COLDEF);
+   if(parseRY(cardY5R)&&(!shCol||shCol===COLDEF)&&!hrCol[d2.h])rawCol=cardY5R;
    var fc=fmtSwCol(rawCol);
-   if(fc){v.G=fc;auto.G=1}
-   var y5r=String(d2.a[6]||'').trim()||lastY5R||calcTCol(rawCol);
-   if(y5r){v.H=y5r;auto.H=1}
+   var y5r=calcTCol(rawCol);
+   if(!y5r&&cardY5R){var yn=parseFloat(cardY5R);if(!isNaN(yn)&&yn>0&&yn<=10)y5r=String(yn)}
+   if(fc){v.G=fc}
+   if(y5r){v.H=y5r}
   }
   var ov=swEx[n2]||{};
   SCOLS.forEach(function(c){
    if(c.k==='B'||c.k==='C'||c.k==='K')return;
-   if(ov[c.k]!==undefined){v[c.k]=ov[c.k];delete auto[c.k]}
+   if(ov[c.k]!==undefined&&ov[c.k]!==''){v[c.k]=ov[c.k];delete auto[c.k]}
   });
   var faNum=num(v.E),red={};
+  if(hI!==undefined)sampFA[n2]=faNum;
   if(faNum!==null&&faNum>0.08){
    red.E=1;
    if(auto.J){v.J='HOLD High FA'}
   }
   rows.push({n:n2,v:v,auto:auto,red:red});
  }
+ /* propagate HOLD High FA to all intermediate bags inside any high-FA 5-ton range */
+ rows.forEach(function(r){
+  if(!r.auto.J||r.v.J==='HOLD High FA')return;
+  var bn=r.n,prevS=null,nextS=null;
+  for(var si=0;si<sampBags.length;si++){
+   var sb=sampBags[si];
+   if(sb<=bn)prevS=sb;
+   if(sb>=bn&&nextS===null)nextS=sb;
+  }
+  var pHi=(prevS!==null&&sampFA[prevS]!==null&&sampFA[prevS]!==undefined&&sampFA[prevS]>0.08);
+  var nHi=(nextS!==null&&sampFA[nextS]!==null&&sampFA[nextS]!==undefined&&sampFA[nextS]>0.08);
+  if((pHi&&nHi)||(nHi&&(prevS===null||bn>nextS-5))||(pHi&&(nextS===null||bn<prevS+5))){
+   r.v.J='HOLD High FA';
+  }
+ });
  /* the average Moisture of the Swing sheet must stay under the average Moisture
     of the Plodder sheet - shift the generated readings down if the random spread
     pushed them back over the Plodder average (manual readings are never touched) */
@@ -1809,24 +1882,22 @@ function swingTableHTML(data,X){
  var h='<table class="swdata" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;width:'+W+'px"><colgroup>';
  SCOLS.forEach(function(c){h+='<col width="'+c.w+'" style="width:'+c.w+'px">'});
  h+='</colgroup>';
- if(CUR==='A'){
-  h+='<tr style="height:14.25pt">';
-  var h1=[];
-  SCOLS.forEach(function(c){
-   h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:#BDD7EE;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.h)+'</td>';
-   h1.push(c.h);
-  });
-  h+='</tr><tr style="height:14.25pt">';
-  tsv.push(h1.join('\t'));
-  var h2=[];
-  SCOLS.forEach(function(c){
-   var bg=(c.sp||c.k==='G')?'#BDD7EE':'#ffffff';
-   h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:'+bg+';color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.sp)+'</td>';
-   h2.push(c.sp);
-  });
-  h+='</tr>';
-  tsv.push(h2.join('\t'));
- }
+ h+='<tr style="height:14.25pt">';
+ var h1=[];
+ SCOLS.forEach(function(c){
+  h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:#BDD7EE;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.h)+'</td>';
+  h1.push(c.h);
+ });
+ h+='</tr><tr style="height:14.25pt">';
+ if(CUR==='A')tsv.push(h1.join('\t'));
+ var h2=[];
+ SCOLS.forEach(function(c){
+  var bg=(c.sp||c.k==='G')?'#BDD7EE':'#ffffff';
+  h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:'+bg+';color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.sp)+'</td>';
+  h2.push(c.sp);
+ });
+ h+='</tr>';
+ if(CUR==='A')tsv.push(h2.join('\t'));
  rows.forEach(function(r){
   var line=[];
   h+='<tr style="height:'+ht+'pt">';
@@ -1855,9 +1926,55 @@ function sumW(a){var t=0;a.forEach(function(c){t+=c.w});return t}
 var SHC={A:'#92CDDC',B:'#FAC090',C:'#E6B9B8'};
 var RED_EX=['E','F','J','K','L','M','N','O','P','Q','R','S'],PL_EX=['E','L','N','O','P','Q','R'];
 function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function loadX(){try{return JSON.parse(sget(XK))||{}}catch(e){return {}}}
+function cleanShiftX(o){
+ if(!o||typeof o!=='object')return o;
+ if(o.sw){
+  Object.keys(o.sw).forEach(function(b){
+   var r=o.sw[b];if(!r||typeof r!=='object'){delete o.sw[b];return}
+   /* remove empty or default auto values that were locked in by earlier saveExtras */
+   ['D','E','F','G','H','I','J'].forEach(function(k){
+    var v=r[k];
+    if(v===undefined)return;
+    var s=String(v).trim();
+    if(s===''||s==='Good'||s==='HOLD High FA'||(k==='G'&&(s==='0.2/1.1'||s===fmtSwCol((o.sh&&o.sh.col)||COLDEF)))||(k==='H'&&(s==='2.1'||s===calcTCol((o.sh&&o.sh.col)||COLDEF)))){
+     delete r[k];
+    }
+   });
+   /* if D..H were all saved at once by the old saveExtras bug, reset the bag override */
+   if(r.D!==undefined&&r.G!==undefined&&r.H!==undefined){delete o.sw[b];return}
+   if(!Object.keys(r).length)delete o.sw[b];
+  });
+ }
+ if(o.ex){
+  Object.keys(o.ex).forEach(function(h){
+   var eh=o.ex[h];if(!eh)return;
+   if(eh.p){
+    ['E','L','N','O','P','Q','R'].forEach(function(k){
+     var v=eh.p[k];
+     if(v===''||v==='N/A'||(k==='E'&&v==='No rancid odor')||(k==='Q'&&v==='Present')||(k==='P'&&(v===COLDEF||v===((o.sh&&o.sh.col)||'')))){
+      delete eh.p[k];
+     }
+    });
+    if(!Object.keys(eh.p).length)delete eh.p;
+   }
+   if(eh.r){
+    RED_EX.forEach(function(k){if(eh.r[k]===''||eh.r[k]==='N/A')delete eh.r[k]});
+    if(!Object.keys(eh.r).length)delete eh.r;
+   }
+   if(!Object.keys(eh).length)delete o.ex[h];
+  });
+ }
+ return o;
+}
+function loadX(){
+ try{
+  var all=JSON.parse(sget(XK))||{};
+  ['A','B','C'].forEach(function(k){if(all[k])cleanShiftX(all[k])});
+  return all;
+ }catch(e){return {}}
+}
 function xs(){return loadX()[CUR]||{}}
-function putX(fn){try{var X=loadX(),o=X[CUR]||{};fn(o);X[CUR]=o;sset(XK,JSON.stringify(X))}catch(e){}}
+function putX(fn){try{var X=loadX(),o=X[CUR]||{};fn(o);cleanShiftX(o);X[CUR]=o;sset(XK,JSON.stringify(X))}catch(e){}}
 function todayISO(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
 function dmY(iso){var p=(iso||todayISO()).split('-');return p[2]+'/'+p[1]+'/'+p[0]}
 function isoFromDMY(s){var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||'').trim());if(!m)return todayISO();var d=+m[1],mo=+m[2],y=+m[3];if(mo<1||mo>12||d<1||d>31)return todayISO();var dt=new Date(y,mo-1,d);if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return todayISO();return y+'-'+('0'+mo).slice(-2)+'-'+('0'+d).slice(-2)}
@@ -1871,8 +1988,8 @@ function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'
 function num(v){var n=parseFloat(v);return isNaN(n)?null:n}
 function vals(kind,d,X){
  var ex=(X.ex&&X.ex[d.h]&&X.ex[d.h][kind])||{};
- function g(k,def){return ex[k]!==undefined?ex[k]:def}
  var v={B:dtxt(curISO(),X.fmt),C:d.h+':00'},red={},ed={},auto={};
+ function g(k,def){if(ex[k]!==undefined&&ex[k]!==''){return ex[k]}auto[k]=1;return def}
  if(kind==='r'){
   v.D='Reactor';v.G=d.a[0];v.H=d.a[1];v.I=d.a[2];
   if(num(v.I)!==null&&num(v.I)>0.08)red.I=1;
@@ -1884,11 +2001,11 @@ function vals(kind,d,X){
   v.I=d.own?d.a[8]:'';v.J=d.own?d.a[9]:'';v.K=d.own?d.a[10]:'';v.M=d.own?d.a[11]:'';
   v.E=g('E','No rancid odor');v.L=g('L','N/A');v.Q=g('Q','Present');v.R=g('R','');
   var rv=d.own?rnd(X,d.h):null;
-  function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||(k==='P'&&e===COLDEF))){auto[k]=1;return val}return e!==undefined?e:''}
+  function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||e==='N/A'||(k==='P'&&e===COLDEF))){auto[k]=1;return val}if(!d.own&&(e===undefined||e===''||e==='N/A')){auto[k]=1;return ''}return e!==undefined?e:''}
   v.N=ga('N',rv&&rv.iv);v.O=ga('O',rv&&rv.ti);v.P=ga('P',rv&&rv.col);
   PL_EX.forEach(function(k){ed[k]=1});
   ['F','G','H','I','J','K','L','M','N','O','P'].forEach(function(k){
-   if(v[k]===''&&ex[k]===undefined)v[k]='N/A';
+   if(v[k]===''&&(ex[k]===undefined||ex[k]==='')){v[k]='N/A';auto[k]=1}
   });
  }
  return{v:v,red:red,ed:ed,auto:auto};
@@ -1968,15 +2085,30 @@ function renderSummary(){
  applyZoom();
 }
 function autoSwFA(){
- [].forEach.call(document.querySelectorAll('#tS table.swdata tr'),function(tr){
-  var E=tr.querySelector('td[data-k="E"]'),J=tr.querySelector('td[data-k="J"]');
-  if(!E||!J)return;
-  var fv=num(E.textContent),hi=(fv!==null&&fv>0.08);
+ var trs=[].slice.call(document.querySelectorAll('#tS table.swdata tr'));
+ var sRows=[];
+ trs.forEach(function(tr,idx){
+  var E=tr.querySelector('td[data-k="E"]');
+  if(!E)return;
+  var fv=num(E.textContent);
   E.style.color='#000000';
-  E.setAttribute('data-red',hi?'1':'0');
-  if(J!==document.activeElement&&J.getAttribute('data-auto')==='1'){
-   J.textContent=hi?'HOLD High FA':'Good ';
+  E.setAttribute('data-red',(fv!==null&&fv>0.08)?'1':'0');
+  if(fv!==null)sRows.push({idx:idx,hi:fv>0.08});
+ });
+ trs.forEach(function(tr,idx){
+  var E=tr.querySelector('td[data-k="E"]'),J=tr.querySelector('td[data-k="J"]');
+  if(!E||!J||J===document.activeElement||J.getAttribute('data-auto')!=='1')return;
+  var fv=num(E.textContent),hi=(fv!==null&&fv>0.08);
+  if(!hi&&fv===null&&sRows.length){
+   var pS=null,nS=null;
+   for(var i=0;i<sRows.length;i++){
+    if(sRows[i].idx<=idx)pS=sRows[i];
+    if(sRows[i].idx>=idx&&!nS)nS=sRows[i];
+   }
+   var pH=!!(pS&&pS.hi),nH=!!(nS&&nS.hi);
+   if((pH&&nH)||(nH&&(!pS||idx>nS.idx-5))||(pH&&(!nS||idx<pS.idx+5)))hi=true;
   }
+  J.textContent=hi?'HOLD High FA':'Good ';
  });
 }
 function autoRed(){
@@ -2007,7 +2139,7 @@ function buildSummary(m){
  m.appendChild(s);
  var sd=s.querySelector('#sd'),sf=s.querySelector('#sf'),sw1=s.querySelector('#sw1'),swTons=s.querySelector('#swTons'),swFrom=s.querySelector('#swFrom'),swTo=s.querySelector('#swTo');
  sd.value=curDMY();sf.value=X.fmt||'dmy';
- sw1.checked=(X.sw1!==undefined)?!!X.sw1:true;
+ var b0=swBounds(CUR);sw1.checked=(X.sw1!==undefined)?!!X.sw1:(b0.st===1||((b0.st-1)%5!==0));
  sw1.onchange=function(){putX(function(o){o.sw1=sw1.checked});renderSummary()};
  swTons.onchange=function(){var v=Math.max(1,parseInt(swTons.value,10)||60);putX(function(o){o.swTons=v;delete o.swTo});renderSummary()};
  swFrom.onchange=function(){var v=Math.max(1,parseInt(swFrom.value,10)||1);putX(function(o){o.swFrom=v;if(o.swTo!==undefined&&o.swTo<v)delete o.swTo});renderSummary()};
@@ -2430,6 +2562,7 @@ function ensure(){
   var host=document.getElementById(HOST);
   if(host&&host.previousElementSibling===bar)return;
   var h=document.createElement('div'); h.id=HOST; h.innerHTML=BOX;
+  if(document.body&&document.body.classList.contains('soapbg'))h.style.display='none';
   main.insertBefore(h,bar.nextSibling);
   xlBind();
 }
@@ -2452,15 +2585,284 @@ else start();
    ============================================================================ */
 var xlBook=null, xlHandle=null, xlName='', xlFresh=false, xlRaw=null;
 
+function xlUnesc(t){return String(t).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,function(m,n){return String.fromCharCode(+n)}).replace(/&amp;/g,'&')}
+function xlColN(L){var n=0;for(var i=0;i<L.length;i++)n=n*26+L.charCodeAt(i)-64;return n}
+function xlParseStyles(xml){
+  if(!xml)return [];
+  var numFmts={14:'dd/mm/yyyy',15:'d-mmm-yy',16:'d-mmm',17:'mmm-yy',20:'h:mm',21:'h:mm:ss',22:'m/d/yy h:mm'},m,re;
+  var nfSec=/<numFmts[^>]*>([\s\S]*?)<\/numFmts>/.exec(xml);
+  if(nfSec){
+    re=/<numFmt\b([^>]*?)\/?>/g;
+    while((m=re.exec(nfSec[1]))!==null){
+      var id=/\bnumFmtId="(\d+)"/.exec(m[1]),fc=/\bformatCode="([^"]*)"/.exec(m[1]);
+      if(id&&fc)numFmts[+id[1]]=xlUnesc(fc[1]);
+    }
+  }
+  var fonts=[],fSec=/<fonts[^>]*>([\s\S]*?)<\/fonts>/.exec(xml);
+  if(fSec){
+    var fl=fSec[1].match(/<font\b[^>]*>[\s\S]*?<\/font>|<font\b[^>]*\/>/g)||[];
+    fonts=fl.map(function(fx){
+      var nm=/<name\b[^>]*\bval="([^"]*)"/.exec(fx),sz=/<sz\b[^>]*\bval="([^"]*)"/.exec(fx);
+      var col=/<color\b[^>]*\brgb="([^"]*)"/.exec(fx);
+      var b=/<b\b(?![^>]*val="0"|[^>]*val="false")/.test(fx),it=/<i\b(?![^>]*val="0"|[^>]*val="false")/.test(fx),u=/<u\b(?![^>]*val="none")/.test(fx);
+      var fo={name:nm?xlUnesc(nm[1]):'Times New Roman',size:sz?parseFloat(sz[1]):11,bold:b,italic:it};
+      if(u)fo.underline=true;
+      if(col)fo.color={argb:col[1]};
+      return fo;
+    });
+  }
+  var fills=[],lSec=/<fills[^>]*>([\s\S]*?)<\/fills>/.exec(xml);
+  if(lSec){
+    var ll=lSec[1].match(/<fill\b[^>]*>[\s\S]*?<\/fill>|<fill\b[^>]*\/>/g)||[];
+    fills=ll.map(function(lx){
+      var pt=/<patternFill\b[^>]*\bpatternType="([^"]*)"/.exec(lx);
+      var fg=/<fgColor\b[^>]*\brgb="([^"]*)"/.exec(lx);
+      var fo={type:'pattern',pattern:pt?pt[1]:'none'};
+      if(fg)fo.fgColor={argb:fg[1]};
+      return fo;
+    });
+  }
+  var borders=[],bSec=/<borders[^>]*>([\s\S]*?)<\/borders>/.exec(xml);
+  if(bSec){
+    var bl=bSec[1].match(/<border\b[^>]*>[\s\S]*?<\/border>|<border\b[^>]*\/>/g)||[];
+    borders=bl.map(function(bx){
+      var bo={};
+      ['left','right','top','bottom'].forEach(function(s){
+        var sm=new RegExp('<'+s+'\\b[^>]*\\bstyle="([^"]+)"').exec(bx);
+        if(sm)bo[s]={style:sm[1]};
+      });
+      return bo;
+    });
+  }
+  var xfs=[],xSec=/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml);
+  if(xSec){
+    var xl=xSec[1].match(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g)||[];
+    xfs=xl.map(function(xx){
+      var fid=+(/\bfontId="(\d+)"/.exec(xx)||[0,0])[1];
+      var lid=+(/\bfillId="(\d+)"/.exec(xx)||[0,0])[1];
+      var bid=+(/\bborderId="(\d+)"/.exec(xx)||[0,0])[1];
+      var nid=+(/\bnumFmtId="(\d+)"/.exec(xx)||[0,0])[1];
+      var hz=/<alignment\b[^>]*\bhorizontal="([^"]*)"/.exec(xx);
+      var vt=/<alignment\b[^>]*\bvertical="([^"]*)"/.exec(xx);
+      return {
+        font:fonts[fid]||{name:'Times New Roman',size:11,bold:true},
+        fill:fills[lid]||{type:'pattern',pattern:'none'},
+        border:borders[bid]||{},
+        alignment:{horizontal:hz?hz[1]:'center',vertical:vt?vt[1]:'center'},
+        numFmt:numFmts[nid]||'General'
+      };
+    });
+  }
+  return xfs;
+}
+function xlSheetFacade(name,xml,sst,xfs){
+  var rows=null,heights=null;
+  function parse(){
+    if(rows)return; rows={}; heights={};
+    var rowRe=/<row\b[^>]*?\/>|<row\b[^>]*?>[\s\S]*?<\/row>/g,cellRe=/<c\b[^>]*?\/>|<c\b[^>]*?>[\s\S]*?<\/c>/g,m,cm;
+    while((m=rowRe.exec(xml))!==null){
+      var rtag=m[0],rn=+(/\br="(\d+)"/.exec(rtag)||[0,0])[1]; if(!rn)continue;
+      var htm=/\bht="([\d.]+)"/.exec(rtag);
+      if(htm)heights[rn]=parseFloat(htm[1]);
+      var cells={}; cellRe.lastIndex=0;
+      while((cm=cellRe.exec(rtag))!==null){
+        var x=cm[0],rf=/\br="([A-Z]+)\d+"/.exec(x); if(!rf)continue;
+        var t=(/\bt="([^"]*)"/.exec(x)||[0,''])[1],v=null,vm=/<v>([\s\S]*?)<\/v>/.exec(x);
+        var si=/\bs="(\d+)"/.exec(x),st=(si&&xfs&&xfs[+si[1]])?xfs[+si[1]]:{};
+        if(t==='s'&&vm)v=sst[+vm[1]];
+        else if(t==='inlineStr'){var ts=x.match(/<t\b[^>]*>[\s\S]*?<\/t>/g)||[];v=ts.map(function(q){return xlUnesc(q.replace(/<[^>]+>/g,''))}).join('')}
+        else if(t==='str'||t==='e')v=vm?xlUnesc(vm[1]):null;
+        else if(t==='b')v=vm?vm[1]==='1':null;
+        else if(vm&&vm[1]!==''){
+          var rawV=vm[1].trim();
+          v=/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(rawV)?parseFloat(rawV):xlUnesc(rawV);
+        }
+        cells[xlColN(rf[1])]={v:(v!==undefined?v:null),st:st};
+      }
+      rows[rn]=cells;
+    }
+  }
+  function cellObj(c){
+    var v=(c&&c.v!==undefined)?c.v:null,st=(c&&c.st)||{};
+    return {value:v,style:st,border:st.border||{},font:st.font||{},fill:st.fill||{},alignment:st.alignment||{},numFmt:st.numFmt||'General'};
+  }
+  function rowObj(rn){
+    var cells=rows[rn]||{};
+    return {number:rn,height:heights[rn],getCell:function(c){return cellObj(cells[c])},
+      eachCell:function(o,cb){
+        var inc=o&&o.includeEmpty;
+        Object.keys(cells).map(Number).sort(function(a,b){return a-b}).forEach(function(c){
+          if(!inc&&(cells[c].v===null||cells[c].v===undefined))return;
+          cb(cellObj(cells[c]),c);
+        });
+      }};
+  }
+  return {name:name,
+    eachRow:function(o,cb){
+      parse();
+      var inc=o&&o.includeEmpty;
+      Object.keys(rows).map(Number).sort(function(a,b){return a-b}).forEach(function(rn){
+        var rmap=rows[rn],hasVal=false,ks=Object.keys(rmap);
+        for(var i=0;i<ks.length;i++){if(rmap[ks[i]].v!==null&&rmap[ks[i]].v!==undefined){hasVal=true;break}}
+        if(inc||hasVal)cb(rowObj(rn),rn);
+      });
+    },
+    getRow:function(rn){parse();return rowObj(rn)},
+    getCell:function(r,c){parse();return cellObj((rows[r]||{})[c])}};
+}
+async function xlReadBook(raw){
+  if(!(raw instanceof Uint8Array))raw=new Uint8Array(raw);
+  var z=await ipZipOpen(raw),dec=new TextDecoder();
+  function txt(n){return z.data[n]?dec.decode(z.data[n]):''}
+  var sst=[],sx=txt('xl/sharedStrings.xml'),m,re;
+  if(sx){re=/<si\b[^>]*>([\s\S]*?)<\/si>/g;
+    while((m=re.exec(sx))!==null){var inner=m[1].replace(/<rPh\b[\s\S]*?<\/rPh>/g,''),ts=inner.match(/<t\b[^>]*>[\s\S]*?<\/t>/g)||[];
+      sst.push(ts.map(function(q){return xlUnesc(q.replace(/<[^>]+>/g,''))}).join(''))}}
+  var xfs=xlParseStyles(txt('xl/styles.xml'));
+  var rels={},relx=txt('xl/_rels/workbook.xml.rels');
+  re=/<Relationship\b[^>]*>/g;
+  while((m=re.exec(relx))!==null){var id=/\bId="([^"]+)"/.exec(m[0]),tg=/\bTarget="([^"]+)"/.exec(m[0]);if(id&&tg)rels[id[1]]=tg[1].charAt(0)==='/'?tg[1].slice(1):'xl/'+tg[1]}
+  var wbx=txt('xl/workbook.xml'),book={worksheets:[]};
+  re=/<sheet\b[^>]*>/g;
+  while((m=re.exec(wbx))!==null){
+    var nm=/\bname="([^"]*)"/.exec(m[0]),ri=/\br:id="([^"]*)"/.exec(m[0]),st=/\bstate="([^"]*)"/.exec(m[0]);
+    if(!nm||!ri||!rels[ri[1]])continue;
+    (function(name,path,state){
+      var holder={name:name,state:state},fac=null;
+      function F(){if(!fac)fac=xlSheetFacade(name,z.data[path]?dec.decode(z.data[path]):'',sst,xfs);return fac}
+      ['eachRow','getRow','getCell'].forEach(function(k){holder[k]=function(){var f=F();return f[k].apply(f,arguments)}});
+      book.worksheets.push(holder);
+    })(xlUnesc(nm[1]),rels[ri[1]],st?st[1]:'visible');
+  }
+  book.getWorksheet=function(n){for(var i=0;i<book.worksheets.length;i++)if(book.worksheets[i].name===n)return book.worksheets[i];return undefined};
+  return book;
+}
+window.swReadBook=xlReadBook;
+function xlBuildScratchZip(ws){
+  var fonts=['<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'],fk={};
+  var fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],lk={};
+  var borders=['<border><left/><right/><top/><bottom/><diagonal/></border>'],bk={};
+  var xfs=['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'],xk={};
+  function fontId(f){
+    f=f||{};var sz=f.size||10,nm=f.name||'Arial',col=((f.color&&f.color.argb)||'FF000000').replace(/^FF/i,'').toUpperCase(),b=f.bold!==false;
+    var k=[sz,col,nm,b?1:0].join('|');
+    if(fk[k]===undefined){fk[k]=fonts.length;fonts.push('<font>'+(b?'<b/>':'')+'<sz val="'+sz+'"/><color rgb="FF'+col+'"/><name val="'+nm+'"/></font>')}
+    return fk[k];
+  }
+  function fillId(fl){
+    if(!fl||fl.pattern==='none'||!fl.fgColor||!fl.fgColor.argb)return 0;
+    var col=fl.fgColor.argb.replace(/^FF/i,'').toUpperCase();
+    if(lk[col]===undefined){lk[col]=fills.length;fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FF'+col+'"/><bgColor indexed="64"/></patternFill></fill>')}
+    return lk[col];
+  }
+  function bSide(n,s){return s&&s.style?'<'+n+' style="'+s.style+'"><color rgb="FF000000"/></'+n+'>':'<'+n+'/>'}
+  function borderId(b){
+    if(!b)return 0;
+    var k=[(b.left&&b.left.style)||'',(b.right&&b.right.style)||'',(b.top&&b.top.style)||'',(b.bottom&&b.bottom.style)||''].join('|');
+    if(k==='|||')return 0;
+    if(bk[k]===undefined){bk[k]=borders.length;borders.push('<border>'+bSide('left',b.left)+bSide('right',b.right)+bSide('top',b.top)+bSide('bottom',b.bottom)+'<diagonal/></border>')}
+    return bk[k];
+  }
+  function xfId(cell){
+    var fi=fontId(cell.font),li=fillId(cell.fill),bi=borderId(cell.border),al=cell.alignment||{};
+    var hz=al.horizontal||'center',vt=al.vertical||'middle',wr=al.wrapText?1:0;
+    var k=[fi,li,bi,hz,vt,wr].join('|');
+    if(xk[k]===undefined){xk[k]=xfs.length;xfs.push('<xf numFmtId="0" fontId="'+fi+'" fillId="'+li+'" borderId="'+bi+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="'+hz+'" vertical="'+vt+'"'+(wr?' wrapText="1"':'')+'/></xf>')}
+    return xk[k];
+  }
+  var NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',RN='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  var sx='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="14.25"/>';
+  var cks=Object.keys(ws._cols).map(Number).sort(function(a,b){return a-b});
+  if(cks.length){
+    sx+='<cols>';
+    cks.forEach(function(c){var w=ws._cols[c].width||10;sx+='<col min="'+c+'" max="'+c+'" width="'+w+'" customWidth="1"/>'});
+    sx+='</cols>';
+  }
+  sx+='<sheetData>';
+  var rks=Object.keys(ws._rows).map(Number).sort(function(a,b){return a-b});
+  rks.forEach(function(rn){
+    var r=ws._rows[rn],ht=r.height||14.25;
+    sx+='<row r="'+rn+'" ht="'+ht+'" customHeight="1">';
+    var cellKs=Object.keys(r._cells).map(Number).sort(function(a,b){return a-b});
+    cellKs.forEach(function(cn){
+      var cell=r._cells[cn],ref=colL(cn-1)+rn,s=xfId(cell),v=cell.value;
+      if(v===null||v===undefined||v==='')sx+='<c r="'+ref+'" s="'+s+'"/>';
+      else if(typeof v==='number'&&isFinite(v))sx+='<c r="'+ref+'" s="'+s+'"><v>'+v+'</v></c>';
+      else sx+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(v)+'</t></is></c>';
+    });
+    sx+='</row>';
+  });
+  sx+='</sheetData>';
+  if(ws._merges.length){
+    sx+='<mergeCells count="'+ws._merges.length+'">'+ws._merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>';
+  }
+  sx+='</worksheet>';
+  var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet '+NS+'><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+borders.length+'">'+borders.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  var wbx='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook '+NS+' '+RN+'><sheets><sheet name="'+xesc(ws.name)+'" sheetId="1" r:id="rId1"/></sheets></workbook>';
+  var rel='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+  var ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+  var rr='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  var enc=new TextEncoder();
+  var z={
+    order:['[Content_Types].xml','_rels/.rels','xl/workbook.xml','xl/_rels/workbook.xml.rels','xl/styles.xml','xl/worksheets/sheet1.xml'],
+    data:{
+      '[Content_Types].xml':enc.encode(ct),
+      '_rels/.rels':enc.encode(rr),
+      'xl/workbook.xml':enc.encode(wbx),
+      'xl/_rels/workbook.xml.rels':enc.encode(rel),
+      'xl/styles.xml':enc.encode(styles),
+      'xl/worksheets/sheet1.xml':enc.encode(sx)
+    }
+  };
+  return ipZipClose(z);
+}
+function xlFallbackClass(){
+  function WB(){
+    var self=this;
+    this.worksheets=[];
+    this.getWorksheet=function(n){for(var i=0;i<self.worksheets.length;i++)if(self.worksheets[i].name===n)return self.worksheets[i];return undefined};
+    this.addWorksheet=function(name){
+      var ws={name:name,_cols:{},_rows:{},_merges:[]};
+      ws.getColumn=function(c){return ws._cols[c]||(ws._cols[c]={width:10})};
+      ws.getRow=function(r){
+        if(!ws._rows[r]){
+          var ro={number:r,height:14.25,_cells:{}};
+          ro.getCell=function(c){return ro._cells[c]||(ro._cells[c]={value:null,font:null,fill:null,alignment:null,border:null,numFmt:'General'})};
+          ro.eachCell=function(o,cb){
+            var inc=o&&o.includeEmpty;
+            Object.keys(ro._cells).map(Number).sort(function(a,b){return a-b}).forEach(function(c){
+              var cell=ro._cells[c];
+              if(!inc&&(cell.value===null||cell.value===undefined||cell.value===''))return;
+              cb(cell,c);
+            });
+          };
+          ws._rows[r]=ro;
+        }
+        return ws._rows[r];
+      };
+      ws.getCell=function(r,c){return ws.getRow(r).getCell(c)};
+      ws.mergeCells=function(r1,c1,r2,c2){ws._merges.push(colL(c1-1)+r1+':'+colL(c2-1)+r2)};
+      ws.eachRow=function(o,cb){
+        var inc=o&&o.includeEmpty;
+        Object.keys(ws._rows).map(Number).sort(function(a,b){return a-b}).forEach(function(rn){
+          var ro=ws._rows[rn],has=false,ks=Object.keys(ro._cells);
+          for(var i=0;i<ks.length;i++){var v=ro._cells[ks[i]].value;if(v!==null&&v!==undefined&&String(v).trim()!==''){has=true;break}}
+          if(inc||has)cb(ro,rn);
+        });
+      };
+      self.worksheets.push(ws);
+      return ws;
+    };
+    this.xlsx={
+      load:function(buf){return xlReadBook(buf)},
+      writeBuffer:function(){return xlBuildScratchZip(self.worksheets[0])}
+    };
+  }
+  return {Workbook:WB};
+}
 function xlEngine(){
   if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
-  return new Promise(function(res,rej){
-    var sc=document.createElement('script');
-    sc.src='vendor/exceljs.min.js';
-    sc.onload=function(){res(window.ExcelJS)};
-    sc.onerror=function(){rej(new Error('the Excel engine file is missing (vendor/exceljs.min.js)'))};
-    document.head.appendChild(sc);
-  });
+  return Promise.resolve(xlFallbackClass());
 }
 /* the old file picker always gives a real File */
 function xlPickByInput(){
@@ -2611,7 +3013,31 @@ function xlRowTemplate(ws){
   }
   return {cols:cols,height:h,ref:ref};
 }
-/* the border of a row of the block - exactly like the factory sheets */
+/* "All Borders" then "Thick Outside Borders", exactly like the Excel menu:
+   thin on every side of every cell of the block, one thick box around the
+   whole block, and the facing edge of the cells just outside the block.
+   The outside line is ONE constant - 'thick' (or 'medium'). */
+var XL_OUTER='thick';
+function xlBoxWrites(writes,r1,r2,c1,c2,noRingAbove){
+  var OUT=XL_OUTER,c,L;
+  writes.forEach(function(w){
+    if(w.sideOnly||w.row<r1||w.row>r2)return;
+    w.edge=null;
+    w.bd=w.bd||{};
+    for(c=c1;c<=c2;c++){
+      L=colL(c-1);
+      w.bd[L]={top:w.row===r1?OUT:'thin',bottom:w.row===r2?OUT:'thin',
+               left:c===c1?OUT:'thin',right:c===c2?OUT:'thin'};
+    }
+    if(c1>1)w.bd[colL(c1-2)]={right:OUT};     /* the cell on the left of the block */
+    w.bd[colL(c2)]={left:OUT};                /* the cell on the right of the block */
+  });
+  var top={row:r1-1,vals:{},red:{},sideOnly:1,bd:{}},bot={row:r2+1,vals:{},red:{},sideOnly:1,bd:{}};
+  for(c=c1;c<=c2;c++){L=colL(c-1);top.bd[L]={bottom:OUT};bot.bd[L]={top:OUT}}
+  if(!noRingAbove&&r1-1>=1)writes.push(top);
+  writes.push(bot);
+}
+/* the border of a row of the block - the old way (kept for reference) */
 function xlBlockBorder(isFirst,isLast,c){
   return {top:{style:isFirst?'medium':'thin'},
           bottom:{style:isLast?'medium':'thin'},
@@ -2763,6 +3189,7 @@ async function xlWrite(){
     var writes=[];
     rows.forEach(function(v,i){xlWriteRow(writes,r,v,tmpl,i===0,i===rows.length-1,refs); r++});
     if(!wrote){xlStatus('Nothing to write in this shift.',true);return}
+    xlBoxWrites(writes,start,start+wrote-1,2,18,start-1<=3);   /* all borders + thick outside (never the header rows) */
     if(!raw)throw new Error('the file could not be read again');
     /* ONLY our rows go into the file - the format of the workbook stays as it is */
     var buf=await ipSurgicalWrite(raw,ws.name,writes,tmpl.ref);
@@ -2817,6 +3244,7 @@ function ensure(){
   var host=document.getElementById(HOST);
   if(host&&host.previousElementSibling===anchor)return;
   var h=document.createElement('div'); h.id=HOST; h.innerHTML=BOX;
+  if(document.body&&document.body.classList.contains('soapbg'))h.style.display='none';
   main.insertBefore(h,anchor.nextSibling);
   ipBind();
 }
@@ -2975,14 +3403,14 @@ async function ipZipClose(z){
     var comp=await ipDeflate(raw),method=8;
     if(!comp||comp.length>=raw.length){comp=raw;method=0}
     var lh=new DataView(new ArrayBuffer(30+nb.length));
-    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,8,true);
-    lh.setUint16(8,method,true);lh.setUint16(10,0,true);lh.setUint16(12,0,true);
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,/[^\x00-\x7f]/.test(name)?0x800:0,true);
+    lh.setUint16(8,method,true);lh.setUint16(10,0,true);lh.setUint16(12,0x21,true);
     lh.setUint32(14,crc,true);lh.setUint32(18,comp.length,true);lh.setUint32(22,raw.length,true);
     lh.setUint16(26,nb.length,true);lh.setUint16(28,0,true);
     var lhb=new Uint8Array(lh.buffer);lhb.set(nb,30);
     var ch=new DataView(new ArrayBuffer(46+nb.length));
-    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,8,true);
-    ch.setUint16(10,method,true);ch.setUint16(12,0,true);ch.setUint16(14,0,true);
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,/[^\x00-\x7f]/.test(name)?0x800:0,true);
+    ch.setUint16(10,method,true);ch.setUint16(12,0,true);ch.setUint16(14,0x21,true);
     ch.setUint32(16,crc,true);ch.setUint32(20,comp.length,true);ch.setUint32(24,raw.length,true);
     ch.setUint16(28,nb.length,true);ch.setUint16(30,0,true);ch.setUint16(32,0,true);ch.setUint16(34,0,true);
     ch.setUint16(36,0,true);ch.setUint32(38,0,true);ch.setUint32(42,off,true);
@@ -3066,7 +3494,7 @@ function ipFindRow(xml,r){
 /* the row tag of a new row: the format of the factory row (height, spans...)
    and the thick bottom of the shift - exactly the way the factory does it */
 function ipRowAttrs(tag,r,thick){
-  var want=['spans','ht','customHeight','s','customFormat','thickTop','hidden','outlineLevel','collapsed'];
+  var want=['ht','customHeight','s','customFormat','thickTop','hidden','outlineLevel','collapsed'];
   var out='',i,mm;
   for(i=0;i<want.length;i++){
     mm=new RegExp('\\s'+want[i]+'="([^"]*)"').exec(tag);
@@ -3076,10 +3504,10 @@ function ipRowAttrs(tag,r,thick){
   return '<row r="'+r+'"'+out+'>';
 }
 function ipCellXml(col,r,s,val){
-  var ref=col+r;
-  if(val===null||val===undefined||val==='')return '<c r="'+ref+'" s="'+s+'"/>';
-  if(typeof val==='number'&&isFinite(val))return '<c r="'+ref+'" s="'+s+'"><v>'+val+'</v></c>';
-  return '<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t>'+ipXmlEsc(val)+'</t></is></c>';
+  var ref=col+r,sa=(s!==''&&s!==null&&s!==undefined)?' s="'+s+'"':'';
+  if(val===null||val===undefined||val==='')return '<c r="'+ref+'"'+sa+'/>';
+  if(typeof val==='number'&&isFinite(val))return '<c r="'+ref+'"'+sa+'><v>'+val+'</v></c>';
+  return '<c r="'+ref+'"'+sa+' t="inlineStr"><is><t>'+ipXmlEsc(val)+'</t></is></c>';
 }
 /* another version of the style of a cell: the red of the factory and/or
    another number format. If the file has no such twin, we add one - the
@@ -3145,12 +3573,11 @@ function ipRedStyle(z,baseS,opt){
       o[sides[i]]=mm?mm[1]:null;
       w[sides[i]]=(opt.border&&opt.border[sides[i]])?opt.border[sides[i]]:o[sides[i]];
     }
-    var nb='<border>'+
-      '<left style="'+(w.left||'thin')+'" color="FF000000"/>'+
-      '<right style="'+(w.right||'thin')+'" color="FF000000"/>'+
-      '<top style="'+(w.top||'thin')+'" color="FF000000"/>'+
-      '<bottom style="'+(w.bottom||'thin')+'" color="FF000000"/>'+
-      '<diagonal/></border>';
+    /* a valid <border>: every side has its <color> as a CHILD element - a
+       "color" attribute is not allowed there and makes Excel repair the file */
+    var bside=function(n,st){return '<'+n+' style="'+st+'"><color rgb="FF000000"/></'+n+'>'};
+    var nb='<border>'+bside('left',w.left||'thin')+bside('right',w.right||'thin')+
+      bside('top',w.top||'thin')+bside('bottom',w.bottom||'thin')+'<diagonal/></border>';
     wantBorderId=-1;
     for(i=0;i<bl.length;i++)if(bl[i]===nb){wantBorderId=i;break}
     if(wantBorderId<0){
@@ -3174,9 +3601,15 @@ function ipRedStyle(z,baseS,opt){
     if(+at(x,/borderId="(\d+)"/,'0')!==wantBorderId)continue;
     if(at(x,/fillId="(\d+)"/,'0')!==bFill)continue;
     if((/<alignment[^>]*\/>/.exec(x)||[''])[0]!==bAl)continue;
+    z.data[key]=new TextEncoder().encode(xml);
     return i;
   }
-  if(wantBorderId!==+bBorder)base=base.replace(/borderId="\d+"/,'borderId="'+wantBorderId+'"');
+  if(wantBorderId!==+bBorder){
+    if(/borderId="\d+"/.test(base))base=base.replace(/borderId="\d+"/,'borderId="'+wantBorderId+'"');
+    else base=base.replace(/^<xf /,'<xf borderId="'+wantBorderId+'" ');
+    if(/applyBorder="/.test(base))base=base.replace(/applyBorder="[^"]*"/,'applyBorder="1"');
+    else base=base.replace(/^<xf /,'<xf applyBorder="1" ');
+  }
   var newFontId=wantFont;
   var newXfs=base;
   if(newFontId!==+bFont)newXfs=newXfs.replace(/fontId="\d+"/,'fontId="'+newFontId+'"');
@@ -3213,6 +3646,10 @@ function ipRedStyle(z,baseS,opt){
   z.data[key]=new TextEncoder().encode(out);
   return newXfId;
 }
+/* the same cell with another format id */
+function ipSetCellStyle(x,s){
+  return x.replace(/^<c\b([^>]*?)(\/?)>/,function(m,a,sl){a=a.replace(/\ss="\d+"/,'');return '<c'+a+(+s?' s="'+s+'"':'')+sl+'>'});
+}
 function ipInsertRow(xml,rowXml,r){
   var sd=xml.indexOf('<sheetData');
   if(sd<0)throw new Error('the sheet has no rows');
@@ -3230,12 +3667,87 @@ function ipInsertRow(xml,rowXml,r){
 }
 /* the heart of it: only our rows go into the sheet - the rest of the file is
    put back untouched */
+function ipSanitizeSheetXml(xml){
+  /* 1. Check shared formula masters so orphaned <f t="shared" si="X"/> never break Excel */
+  var masters={},mRe=/<f\b[^>]*\bt="shared"[^>]*\bref="[^"]+"[^>]*\bsi="(\d+)"|<f\b[^>]*\bt="shared"[^>]*\bsi="(\d+)"[^>]*\bref="[^"]+"/g,mm;
+  while((mm=mRe.exec(xml))!==null)masters[mm[1]||mm[2]]=1;
+  /* 2. Sort all <c> elements inside every <row> in strict ascending column order and fix invalid attributes */
+  var sdStart=xml.indexOf('<sheetData');
+  if(sdStart<0)return xml;
+  var gt=xml.indexOf('>',sdStart);
+  if(gt<0||xml.slice(sdStart,gt+1).indexOf('/>')>=0)return xml;
+  var sdEnd=xml.indexOf('</sheetData>',gt);
+  if(sdEnd<0)return xml;
+  var inner=xml.slice(gt+1,sdEnd);
+  var rowRe=/<row\b([^>]*?)\/>|<row\b([^>]*?)>([\s\S]*?)<\/row>/g,rm,rowMap={},rowNums=[];
+  while((rm=rowRe.exec(inner))!==null){
+    var rAttr=rm[1]!==undefined?rm[1]:rm[2],rBody=rm[3]||'',rnM=/\br="(\d+)"/.exec(rAttr);
+    if(!rnM)continue;
+    var rn=+rnM[1];
+    if(rowMap[rn]===undefined)rowNums.push(rn);
+    /* remove stale spans attribute */
+    var cleanRAttr=rAttr.replace(/\sspans="[^"]*"/g,'');
+    if(!rBody){
+      rowMap[rn]='<row'+cleanRAttr+'/>';
+      continue;
+    }
+    var cRe=/<c\b([^>]*?)\/>|<c\b([^>]*?)>([\s\S]*?)<\/c>/g,cm,cMap={};
+    while((cm=cRe.exec(rBody))!==null){
+      var cAttr=cm[1]!==undefined?cm[1]:cm[2],cInner=cm[3],cXml=cm[0];
+      var refM=/\br="([A-Z]+)\d+"/.exec(cAttr);
+      if(!refM)continue;
+      var col=refM[1];
+      /* fix empty s="" */
+      cXml=cXml.replace(/\ss=""/g,'');
+      /* fix cell row number if mismatched */
+      cXml=cXml.replace(/(\br="[A-Z]+)\d+(")/,'$1'+rn+'$2');
+      /* strip orphaned shared formula child tags */
+      if(cInner&&/<f\b[^>]*\bt="shared"/.test(cInner)&&!/\bref="/.test(cInner)){
+        var siM=/\bsi="(\d+)"/.exec(cInner);
+        if(!siM||!masters[siM[1]]){
+          cXml=cXml.replace(/<f\b[^>]*\/>|<f\b[^>]*>[\s\S]*?<\/f>/,'');
+        }
+      }
+      cMap[col]=cXml;
+    }
+    var sortedCols=ipColOrder(Object.keys(cMap));
+    var newBody=sortedCols.map(function(c){return cMap[c]}).join('');
+    rowMap[rn]='<row'+cleanRAttr+'>'+newBody+'</row>';
+  }
+  rowNums.sort(function(a,b){return a-b});
+  var newInner=rowNums.map(function(n){return rowMap[n]}).join('');
+  return xml.slice(0,gt+1)+newInner+xml.slice(sdEnd);
+}
+function ipSanitizeWorkbook(z){
+  var dec=new TextDecoder(),enc=new TextEncoder();
+  /* remove calcChain.xml so Excel never complains about modified/replaced formula cells */
+  if(z.data['xl/calcChain.xml']){
+    delete z.data['xl/calcChain.xml'];
+    z.order=z.order.filter(function(n){return n!=='xl/calcChain.xml'});
+    if(z.data['[Content_Types].xml']){
+      var ct=dec.decode(z.data['[Content_Types].xml']).replace(/<Override[^>]*calcChain\.xml[^>]*\/>/g,'');
+      z.data['[Content_Types].xml']=enc.encode(ct);
+    }
+    if(z.data['xl/_rels/workbook.xml.rels']){
+      var rl=dec.decode(z.data['xl/_rels/workbook.xml.rels']).replace(/<Relationship[^>]*calcChain\.xml[^>]*\/>/g,'');
+      z.data['xl/_rels/workbook.xml.rels']=enc.encode(rl);
+    }
+  }
+  /* sanitize all worksheets in the zip so even previously broken rows in sheet2.xml are repaired */
+  z.order.forEach(function(name){
+    if(/^xl\/worksheets\/sheet[^\/]*\.xml$/.test(name)&&z.data[name]){
+      var sxml=dec.decode(z.data[name]);
+      z.data[name]=enc.encode(ipSanitizeSheetXml(sxml));
+    }
+  });
+}
 async function ipSurgicalWrite(raw,sheetName,writes,refRow){
   var z=await ipZipOpen(raw);
   var path=ipSheetPath(z,sheetName);
   if(!path)throw new Error('the sheet "'+sheetName+'" was not found inside the file');
   var xml=new TextDecoder().decode(z.data[path]);
   z.data[path]=new TextEncoder().encode(ipApplyWrites(z,xml,writes,refRow));
+  ipSanitizeWorkbook(z);
   return await ipZipClose(z);
 }
 /* the styles of a scratch workbook (ExcelJS) are put into the file: the
@@ -3332,6 +3844,7 @@ async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName,replac
     if(oldPath){
       var clean=sheetXml.replace(/\s*r:id="[^"]*"/g,'');   /* no links of the scratch */
       z.data[oldPath]=new TextEncoder().encode(clean);
+      ipSanitizeWorkbook(z);
       return await ipZipClose(z);
     }
   }
@@ -3356,6 +3869,7 @@ async function ipAddSheetFromWorkbook(raw,scratchBuf,scratchSheet,newName,replac
   var ct=new TextDecoder().decode(z.data['[Content_Types].xml']);
   z.data['[Content_Types].xml']=new TextEncoder().encode(
     ct.replace('</Types>','<Override PartName="/'+part+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'));
+  ipSanitizeWorkbook(z);
   return await ipZipClose(z);
 }
 /* put our rows into the xml of a sheet - nothing else of the sheet changes */
@@ -3379,7 +3893,8 @@ function ipApplyWrites(z,xml,writes,refRow){
   var byRow={},k,maxRow=0;
   for(k=0;k<writes.length;k++){
     var w=writes[k];
-    if(!byRow[w.row])byRow[w.row]={row:w.row,vals:{},red:{},thick:0};
+    if(!byRow[w.row])byRow[w.row]={row:w.row,vals:{},red:{},thick:0,sideOnly:!!w.sideOnly};
+    if(!w.sideOnly)byRow[w.row].sideOnly=false;
     var vk=Object.keys(w.vals||{}),vk2,rk2;
     for(vk2=0;vk2<vk.length;vk2++)byRow[w.row].vals[vk[vk2]]=w.vals[vk[vk2]];
     rk2=Object.keys(w.red||{});
@@ -3387,12 +3902,29 @@ function ipApplyWrites(z,xml,writes,refRow){
     if(w.fmt)byRow[w.row].fmt=w.fmt;
     if(w.ref)byRow[w.row].ref=w.ref;
     if(w.edge)byRow[w.row].edge=w.edge;
-    if(w.bd)byRow[w.row].bd=w.bd;
+    if(w.bd){var bbm=byRow[w.row].bd||(byRow[w.row].bd={});Object.keys(w.bd).forEach(function(cc){bbm[cc]=Object.assign(bbm[cc]||{},w.bd[cc])})}
     if(w.thick)byRow[w.row].thick=1;
   }
   var rows=Object.keys(byRow);
   for(k=0;k<rows.length;k++){
     var r=+rows[k],bw=byRow[rows[k]],cells=[],ci;
+    /* a row we only draw a border on (the facing edge of the neighbour of a
+       block): the cells keep their value AND their format, only the side
+       changes - and a row that is not in the sheet is never created */
+    if(bw.sideOnly){
+      var exo=ipFindRow(xml,r);
+      if(!exo||!exo.body)continue;
+      var oc=ipColOrder(Object.keys(exo.cells)),parts=[],oi;
+      for(oi=0;oi<oc.length;oi++){
+        var cx=exo.cells[oc[oi]];
+        if(bw.bd&&bw.bd[oc[oi]]){
+          var ns=ipRedStyle(z,+(cx.s||0),{border:bw.bd[oc[oi]]});
+          parts.push((ns!==null&&ns!==undefined)?ipSetCellStyle(cx.xml,String(ns)):cx.xml);
+        } else parts.push(cx.xml);
+      }
+      xml=xml.slice(0,exo.start)+exo.tag.replace(/\s*\/>\s*$/,'>')+parts.join('')+'</row>'+xml.slice(exo.end);
+      continue;
+    }
     /* the row the format comes from (the factory rows can differ: the end of
        a block has a medium bottom) */
     var src=ref;
@@ -3404,15 +3936,22 @@ function ipApplyWrites(z,xml,writes,refRow){
     var ex=ipFindRow(xml,r);
     var keep=ex?ex.cells:{};
     var srcCols=Object.keys(src.cells);
-    /* every column of the row: ours, the ones of the reference and the ones
-       the factory already has in this row */
+    var defS='0';
+    ['D','E','F','G','H','I','C','B'].forEach(function(ck){if(defS==='0'&&src.cells[ck]&&src.cells[ck].s)defS=src.cells[ck].s});
+    /* every column of the row in strict ascending column order (A, B, C...) */
     var all={},ci2;
     for(ci2=0;ci2<srcCols.length;ci2++)all[srcCols[ci2]]=1;
     var keepCols=Object.keys(keep);
     for(ci2=0;ci2<keepCols.length;ci2++)all[keepCols[ci2]]=1;
+    var valCols=Object.keys(bw.vals);
+    for(ci2=0;ci2<valCols.length;ci2++){
+      var vc=valCols[ci2];
+      if(bw.vals[vc]===null&&!src.cells[vc]&&!keep[vc]&&!(bw.bd&&bw.bd[vc]))continue;
+      all[vc]=1;
+    }
     var cols=ipColOrder(Object.keys(all));
     for(ci=0;ci<cols.length;ci++){
-      var col=cols[ci],rc=src.cells[col],s=rc?rc.s:'0';
+      var col=cols[ci],rc=src.cells[col]||keep[col],s=(rc&&rc.s!==''&&rc.s!==undefined)?rc.s:defS;
       if(Object.prototype.hasOwnProperty.call(bw.vals,col)){
         if(bw.red[col]){var rs=ipRedStyle(z,+s,{red:true});if(rs!==null&&rs!==undefined)s=String(rs)}
         if(bw.fmt&&bw.fmt[col]){var fs=ipRedStyle(z,+s,{numFmt:bw.fmt[col]});if(fs!==null&&fs!==undefined)s=String(fs)}
@@ -3423,18 +3962,21 @@ function ipApplyWrites(z,xml,writes,refRow){
         cells.push(ipCellXml(col,r,s,bw.vals[col]));
       }else if(keep[col]){
         /* a cell of the factory that we do not write: it stays exactly as it
-           is - the value AND the format */
-        cells.push(keep[col].xml);
+           is - the value AND the format (only a side of its border may change
+           when it touches our block) */
+        if(bw.bd&&bw.bd[col]){
+          var kb=ipRedStyle(z,+(keep[col].s||0),{border:bw.bd[col]});
+          cells.push((kb!==null&&kb!==undefined)?ipSetCellStyle(keep[col].xml,String(kb)):keep[col].xml);
+        } else cells.push(keep[col].xml);
       }else{
         /* a cell of the reference row that we do not write: it keeps the
            format of the factory (an empty style is never written) */
-        if(rc&&rc.s)cells.push('<c r="'+col+r+'" s="'+rc.s+'"/>');
+        if(rc&&rc.s){
+          var rs2=rc.s;
+          if(bw.bd&&bw.bd[col]){var rb2=ipRedStyle(z,+rs2,{border:bw.bd[col]});if(rb2!==null&&rb2!==undefined)rs2=String(rb2)}
+          cells.push('<c r="'+col+r+'" s="'+rs2+'"/>');
+        }
       }
-    }
-    var extra=Object.keys(bw.vals);
-    for(ci=0;ci<extra.length;ci++){
-      var c2=extra[ci];
-      if(!all[c2])cells.push(ipCellXml(c2,r,'0',bw.vals[c2]));
     }
     var rowXml=ipRowAttrs(src.tag,r,bw.thick)+cells.join('')+'</row>';
     if(ex)xml=xml.slice(0,ex.start)+rowXml+xml.slice(ex.end);
@@ -3485,6 +4027,7 @@ async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow,dropRows){
   var srcPath=ipSheetPath(z,srcName);
   if(!srcPath)throw new Error('the sheet "'+srcName+'" was not found inside the file');
   var xml=new TextDecoder().decode(z.data[srcPath]);
+  xml=xml.replace(/\stabSelected="1"/g,'');   /* two selected tabs = grouped sheets: every edit would hit both */
   /* only the header and the rows of the hours of the day stay - the rows of
      the old day and the empty rows at the end of the sheet go away */
   if(dropRows){
@@ -3673,6 +4216,51 @@ function ipCellStyle(t,isTop,isBot){
             top:{style:isTop?'medium':'thin'}, bottom:{style:isBot?'medium':'thin'}}
   };
 }
+/* "All Borders" + "Thick Outside Borders" for the shifts of the In Process sheet:
+   every shift of the day is ONE box (thin inside, thick around) - columns B..S.
+   planHours = the rows of a NEW sheet of the day; otherwise the rows of today's
+   shifts that were written are boxed (all the rows of that shift on the sheet). */
+function ipBoxWrites(ws,writes,planHours){
+  var OUT=XL_OUTER,HR=9,blocks={},touched={},b,c,L;
+  function add(bk,rn){if(!bk)return;(blocks[bk]=blocks[bk]||{})[rn]=1}
+  if(planHours){
+    planHours.forEach(function(x){add(ipBlockOf(x.h),x.rn);touched[ipBlockOf(x.h)]=1});
+  } else {
+    var today=ipTodaySerial();
+    ws.eachRow({includeEmpty:false},function(row,rn){
+      if(rn<=HR)return;
+      var h=ipHourOf(ws,rn); if(h==null)return;
+      var d=xlDateVal(ws.getCell(rn,2).value);
+      if(d!=null&&String(d)!==String(today))return;
+      add(ipBlockOf(h),rn);
+    });
+    writes.forEach(function(w){var bk=ipBlockOf(w.h);if(bk){add(bk,w.row);touched[bk]=1}});
+  }
+  var byRow={};
+  writes.forEach(function(w){byRow[w.row]=byRow[w.row]||[];byRow[w.row].push(w)});
+  var extra=[];
+  Object.keys(blocks).forEach(function(bk){
+    if(!touched[bk])return;
+    var rows=Object.keys(blocks[bk]).map(Number).sort(function(a,b2){return a-b2});
+    var r1=rows[0],r2=rows[rows.length-1];
+    rows.forEach(function(rn){
+      var bd={};
+      for(c=2;c<=19;c++){
+        L=colL(c-1);
+        bd[L]={top:rn===r1?OUT:'thin',bottom:rn===r2?OUT:'thin',left:c===2?OUT:'thin',right:c===19?OUT:'thin'};
+      }
+      bd[colL(0)]={right:OUT};          /* column A, on the left of the box */
+      bd[colL(19)]={left:OUT};          /* column T, on the right of the box */
+      if(byRow[rn]){byRow[rn].forEach(function(w){w.edge=null;w.bd=w.bd||{};Object.keys(bd).forEach(function(k2){w.bd[k2]=bd[k2]})})}
+      else extra.push({row:rn,vals:{},red:{},sideOnly:1,bd:bd});
+    });
+    /* the facing edges just outside the box (never the header rows) */
+    if(r1-1>HR){var tp={row:r1-1,vals:{},red:{},sideOnly:1,bd:{}};for(c=2;c<=19;c++)tp.bd[colL(c-1)]={bottom:OUT};extra.push(tp)}
+    var bt={row:r2+1,vals:{},red:{},sideOnly:1,bd:{}};for(c=2;c<=19;c++)bt.bd[colL(c-1)]={top:OUT};extra.push(bt);
+  });
+  extra.forEach(function(e){writes.push(e)});
+  return writes;
+}
 /* which shift does this hour belong to? (00:00 belongs to shift C) */
 function ipBlockOf(h){
   if(h==null)return null;
@@ -3848,6 +4436,7 @@ async function ipWrite(){
     }
     var res=ipWriteHours(ws,data,X,byHour);
     if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
+    if(!plan)ipBoxWrites(ws,res.writes,null);     /* the shift boxes of the sheet that was already there */
     if(!raw)throw new Error('the file could not be read again');
     /* ONLY our rows go into the file - the format of the workbook stays as it is */
     var buf;
@@ -3865,6 +4454,7 @@ async function ipWrite(){
         emptyWrites.push(w);
       });
       var dayWrites=emptyWrites.concat(res.writes);
+      ipBoxWrites(ws,dayWrites,plan.hours);        /* every shift of the new sheet is one box */
       buf=await ipCreateSheetWrite(raw,name,todayName,dayWrites,res.ref,plan.keep);
       name=todayName;
     } else {
@@ -3930,15 +4520,173 @@ var swBook=null, swHandle=null, swName='', swFresh=false, swRaw=null;
 /* the name of a new sheet: "Swing Noodles 9-11-2026" */
 /* the name of the sheet of the day - the way the factory names its sheets:
    the day first and then the product: "14.11.2026 (85-15)" */
+/* ===== reading the workbook WITHOUT ExcelJS =====================================
+   The Swing section only needs to LOOK at the sheets (names, header, bag rows).
+   It reads them straight from the xml of the file, so a workbook that ExcelJS
+   cannot open (or opens wrongly) never stops it, and nothing is re-saved. */
+function swUnesc(t){return String(t).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,function(m,n){return String.fromCharCode(+n)}).replace(/&amp;/g,'&')}
+function swColN(L){var n=0;for(var i=0;i<L.length;i++)n=n*26+L.charCodeAt(i)-64;return n}
+function swSheetFacade(name,xml,sst){
+  var rows=null;
+  function parse(){
+    if(rows)return; rows={};
+    var rowRe=/<row\b[^>]*?\/>|<row\b[^>]*?>[\s\S]*?<\/row>/g,cellRe=/<c\b[^>]*?\/>|<c\b[^>]*?>[\s\S]*?<\/c>/g,m,cm;
+    while((m=rowRe.exec(xml))!==null){
+      var rn=+(/\br="(\d+)"/.exec(m[0])||[0,0])[1]; if(!rn)continue;
+      var cells={}; cellRe.lastIndex=0;
+      while((cm=cellRe.exec(m[0]))!==null){
+        var x=cm[0],rf=/\br="([A-Z]+)\d+"/.exec(x); if(!rf)continue;
+        var t=(/\bt="([^"]*)"/.exec(x)||[0,''])[1],v=null,vm=/<v>([\s\S]*?)<\/v>/.exec(x);
+        if(t==='s'&&vm)v=sst[+vm[1]];
+        else if(t==='inlineStr'){var ts=x.match(/<t\b[^>]*>[\s\S]*?<\/t>/g)||[];v=ts.map(function(q){return swUnesc(q.replace(/<[^>]+>/g,''))}).join('')}
+        else if(t==='str'||t==='e')v=vm?swUnesc(vm[1]):null;
+        else if(t==='b')v=vm?vm[1]==='1':null;
+        else if(vm&&vm[1]!==''){v=parseFloat(vm[1]);if(isNaN(v))v=swUnesc(vm[1])}
+        if(v!==null&&v!==undefined)cells[swColN(rf[1])]=v;
+      }
+      rows[rn]=cells;
+    }
+  }
+  function cellObj(v){return {value:(v===undefined?null:v)}}
+  function rowObj(rn){
+    var cells=rows[rn]||{};
+    return {number:rn,getCell:function(c){return cellObj(cells[c])},
+      eachCell:function(o,cb){Object.keys(cells).map(Number).sort(function(a,b){return a-b}).forEach(function(c){cb(cellObj(cells[c]),c)})}};
+  }
+  return {name:name,
+    eachRow:function(o,cb){parse();Object.keys(rows).map(Number).sort(function(a,b){return a-b}).forEach(function(rn){if(Object.keys(rows[rn]).length)cb(rowObj(rn),rn)})},
+    getRow:function(rn){parse();return rowObj(rn)},
+    getCell:function(r,c){parse();return cellObj((rows[r]||{})[c])}};
+}
+async function swReadBook(raw){
+  var z=await ipZipOpen(raw),dec=new TextDecoder();
+  function txt(n){return z.data[n]?dec.decode(z.data[n]):''}
+  var sst=[],sx=txt('xl/sharedStrings.xml'),m,re;
+  if(sx){re=/<si\b[^>]*>([\s\S]*?)<\/si>/g;
+    while((m=re.exec(sx))!==null){var inner=m[1].replace(/<rPh\b[\s\S]*?<\/rPh>/g,''),ts=inner.match(/<t\b[^>]*>[\s\S]*?<\/t>/g)||[];
+      sst.push(ts.map(function(q){return swUnesc(q.replace(/<[^>]+>/g,''))}).join(''))}}
+  var rels={},relx=txt('xl/_rels/workbook.xml.rels');
+  re=/<Relationship\b[^>]*>/g;
+  while((m=re.exec(relx))!==null){var id=/\bId="([^"]+)"/.exec(m[0]),tg=/\bTarget="([^"]+)"/.exec(m[0]);if(id&&tg)rels[id[1]]=tg[1].charAt(0)==='/'?tg[1].slice(1):'xl/'+tg[1]}
+  var wbx=txt('xl/workbook.xml'),book={worksheets:[]};
+  re=/<sheet\b[^>]*>/g;
+  while((m=re.exec(wbx))!==null){
+    var nm=/\bname="([^"]*)"/.exec(m[0]),ri=/\br:id="([^"]*)"/.exec(m[0]),st=/\bstate="([^"]*)"/.exec(m[0]);
+    if(!nm||!ri||!rels[ri[1]])continue;
+    (function(name,path,state){
+      var holder={name:name,state:state},fac=null;
+      function F(){if(!fac)fac=swSheetFacade(name,z.data[path]?dec.decode(z.data[path]):'',sst);return fac}
+      ['eachRow','getRow','getCell'].forEach(function(k){holder[k]=function(){var f=F();return f[k].apply(f,arguments)}});
+      book.worksheets.push(holder);
+    })(swUnesc(nm[1]),rels[ri[1]],st?st[1]:'visible');
+  }
+  book.getWorksheet=function(n){for(var i=0;i<book.worksheets.length;i++)if(book.worksheets[i].name===n)return book.worksheets[i];return undefined};
+  return book;
+}
+/* the date of a sheet name: "29.10.2026 (85-15)", "Swing Noodles 9-11-2026" ... */
+function swSheetDate(name){var m=/(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4})/.exec(String(name));return m?[+m[1],+m[2],+m[3]]:null}
+/* the sheet we copy when the day starts: the newest Swing sheet of the factory
+   (a name like "29.10.2026 (85-15)") that is not in the future. The format of the
+   new sheet is then EXACTLY the format of the factory - the header, the widths,
+   the colours, the bag rows. */
+function swSourceSheet(book){
+  if(!book)return null;
+  var p=String(curISO()).split('-'),today=+p[0]*10000+(+p[1])*100+(+p[2]),best=null,bk=null;
+  (book.worksheets||[]).forEach(function(ws,i){
+    if(ws.state&&ws.state!=='visible')return;
+    var d=swSheetDate(ws.name); if(!d)return;
+    if(!swIsSwingSheet(ws))return;
+    var v=d[2]*10000+d[1]*100+d[0];
+    var key=[/^\s*\d{1,2}\.\d{1,2}\.\d{4}/.test(ws.name)?1:0, v<=today?1:0, v, i];
+    if(!bk){best=ws;bk=key;return}
+    for(var q=0;q<4;q++){if(key[q]>bk[q]){best=ws;bk=key;return}if(key[q]<bk[q])return}
+  });
+  return best;
+}
+/* the name of the new sheet: the name of the source with the new date */
+function swNameLike(srcName){
+  var m=/(\d{1,2})([.\-\/])(\d{1,2})\2(\d{4})/.exec(srcName); if(!m)return '';
+  var p=String(curISO()).split('-'),d=+p[2],mo=+p[1];
+  function f(n,keep){return (keep.length===2&&n<10)?'0'+n:''+n}
+  var nd=f(d,m[1])+m[2]+f(mo,m[3])+m[2]+p[0];
+  return String(srcName).replace(m[0],nd).replace(/\s+$/,'');
+}
+function swAutoName(){
+  var src=swBook?swSourceSheet(swBook):null,n=src?swNameLike(src.name):'';
+  return n||swDefaultName();
+}
+/* the results that must be in the saved file: every bag that has a Moisture */
+function swExpect(items){
+  var keys=[],results=[];
+  items.forEach(function(p){
+    keys.push(p.key);
+    var v=p.r&&p.r.v?p.r.v.D:null;
+    if(v!==null&&v!==undefined&&String(v).trim()!=='')results.push({key:p.key,col:4});
+  });
+  return {keys:keys,results:results};
+}
+/* read the SAVED bytes again and check that the bags AND their results are there */
+async function swVerifyBuf(buf,name,expect){
+  var b=await swReadBook(new Uint8Array(buf)),ws=b.getWorksheet(name);
+  if(!ws)return {ok:false,msg:'the sheet "'+name+'" is not in the saved file'};
+  var sc=swScanSheet(ws),miss=[];
+  expect.keys.forEach(function(k){if(sc.map[k]==null)miss.push(k)});
+  if(miss.length)return {ok:false,msg:'the bag(s) '+miss.slice(0,6).join(', ')+' are not in the sheet "'+name+'" after writing'};
+  var got=0;
+  expect.results.forEach(function(e){var v=ws.getCell(sc.map[e.key],e.col).value;if(v!==null&&v!==undefined&&String(v).trim()!=='')got++});
+  if(got<expect.results.length)return {ok:false,msg:'only '+got+' of '+expect.results.length+' results were found in the sheet "'+name+'" after writing - nothing was saved'};
+  return {ok:true,results:got};
+}
+/* a NEW day: the newest sheet of the factory is COPIED (header, widths, colours,
+   borders, print setup - everything), the date is changed, the results of the old
+   day are cleared and the results of this shift are written. */
+async function swCloneDay(raw,book,src,newName,X){
+  var swr=swingRows(registeredRows(hourData()),X);
+  if(!swr.rows.length)return {res:{rows:0}};
+  var byKey={};
+  swr.rows.forEach(function(r){var k=String(r.v.B||'').trim();if(k)byKey[k]=r});
+  var sc=swScanSheet(src),date=dtxt(curISO(),'dmy'),writes=[],plan=[],keys=Object.keys(sc.map).filter(function(k){return /^B\d+$/i.test(k)}),used={};
+  function conv(val){
+    if(val===undefined||val===null||val==='')return null;
+    if(typeof val==='number')return val;
+    if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))return parseFloat(val);
+    return String(val);
+  }
+  keys.forEach(function(k){
+    var rn=sc.map[k],r=byKey[k],vals={C:date},red={},L;
+    ['D','E','F','G','H'].forEach(function(c){vals[c]=null});     /* the results of the old day go away */
+    if(r){
+      used[k]=1;
+      ['D','E','F','G','H','I','J','K'].forEach(function(c){
+        var v=conv(r.v[c]);
+        if(c==='K'||v!==null)vals[c]=v;
+        if(r.red&&r.red[c])red[c]=1;
+      });
+      plan.push({key:k,rn:rn,r:r});
+    } else {
+      /* a bag of another shift: the factory text stays, only an old HOLD note goes */
+      [['I',9],['J',10]].forEach(function(q){
+        var old=swCellText(src.getCell(rn,q[1]).value);
+        if(/^\s*hold/i.test(old))vals[q[0]]='Good ';
+      });
+    }
+    writes.push({row:rn,vals:vals,red:red,ref:rn});
+  });
+  var dropped=0;Object.keys(byKey).forEach(function(k){if(!used[k])dropped++});
+  if(!plan.length)throw new Error('the bags of this shift ('+swr.rows[0].v.B+'...) are not in the sheet "'+src.name+'" that was copied');
+  var buf=await ipCreateSheetWrite(raw,src.name,newName,writes,sc.refRow>2?sc.refRow:writes[0].row,null);
+  return {buf:buf,res:{rows:plan.length,keys:plan.map(function(p){return p.key}),from:plan[0].key,to:plan[plan.length-1].key,dropped:dropped,
+          bags:plan[0].key+'..'+plan[plan.length-1].key},expect:swExpect(plan)};
+}
 function swDefaultName(){
   var p=String(curISO()).split('-');
-  var d=(''+(+p[2])).replace(/^0/,'')+'.'+(''+(+p[1])).replace(/^0/,'')+'.'+p[0];
+  var d=p[2]+'.'+p[1]+'.'+p[0];              /* dd.mm.yyyy - the way the factory writes it */
   return d+' (85-15)';
 }
 function swNewName(){
   var el=document.getElementById('swNewName');
   var v=(el&&el.value)?String(el.value).trim():'';
-  if(!v)v=swDefaultName();
+  if(!v||(el&&el.dataset&&el.dataset.auto==='1'&&v===el.dataset.last))v=swAutoName();   /* not typed by hand: it follows the day */
   return v.replace(/[\\\/\?\*\[\]:]/g,'-');        /* excel hates these in a sheet name */
 }
 function swStatus(txt,bad){
@@ -4121,7 +4869,7 @@ function swBagKeyNo(v){
 function swRowFilled(row){
   var hit=false;
   row.eachCell({includeEmpty:false},function(cell,cn){
-    if(hit||cn<4||cn>11)return;
+    if(hit||cn<4||cn>8)return;
     var v=cell.value;
     if(v===null||v===undefined)return;
     if(String(v).trim()!=='')hit=true;
@@ -4140,14 +4888,17 @@ function swRowShift(row){
 /* what is already in the sheet: the numbering, the rows of this shift and the
    end of the block of the earlier shifts */
 function swScanSheet(ws){
-  var map={},last=2,firstBag=0,mine=[],prevEnd=0,prevBag=0,lastData=0;
+  var map={},last=2,firstBag=0,mine=[],prevEnd=0,prevBag=0,lastData=0,sampRef=0;
   ws.eachRow({includeEmpty:false},function(row,rn){
     if(rn<=2)return;
     var b=swCellText(row.getCell(2).value).trim();
     if(b&&map[b]==null)map[b]=rn;
     /* the last row that really holds the bags - the format of our rows comes
        from a row like this, never from a stray row of the factory */
-    if(b&&/^B\d+$/i.test(b))lastData=rn;
+    if(b&&/^B\d+$/i.test(b)){
+      lastData=rn;
+      if(!sampRef&&swRowFilled(row))sampRef=rn;
+    }
     if(b){var bn=swBagNo(b,0); if(bn&&(!firstBag||bn<firstBag))firstBag=bn;}
     if(rn>last)last=rn;
     /* the rows of this shift (they are written again in their own place when
@@ -4164,7 +4915,7 @@ function swScanSheet(ws){
     if(swRowFilled(row)&&(!CUR||swRowShift(row)!==CUR))busy[rn]=1;
   });
   return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag,busy:busy,
-          lastData:lastData,refRow:(lastData>2?lastData:(last>2?last:3))};
+          lastData:lastData,refRow:(sampRef>2?sampRef:(lastData>2?lastData:(last>2?last:3)))};
 }
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
@@ -4244,7 +4995,8 @@ function swMakePlan(sc,rows){
        The bag of the factory is kept - we only fill the empty cells. */
     var lastMine=sc.mine[sc.mine.length-1];
     rows.forEach(function(r,i){
-      var rn,key;
+      var rn,key,k0=String(r.v.B||'').trim();
+      if(k0&&sc.map[k0]!=null){plan.push({key:k0,rn:sc.map[k0],r:r});return}      /* the row of that bag */
       if(i<sc.mine.length){rn=sc.mine[i].rn;key=sc.mine[i].key||('B'+(lastMine.no+i-sc.mine.length+1))}
       else{rn=lastMine.rn+1+(i-sc.mine.length);key=String(r.v.B||'').trim()||('B'+(lastMine.no+1+(i-sc.mine.length)))}
       plan.push({key:key,rn:rn,r:r});
@@ -4314,12 +5066,12 @@ function swFillSelect(){
   var lab=document.getElementById('swSheetLab'); if(lab)lab.hidden=false;
   var nl=document.getElementById('swNameLab'); if(nl)nl.hidden=false;
   var nm=document.getElementById('swNewName');
-  if(nm&&!nm.value)nm.value=swDefaultName();
+  if(nm&&(!nm.value||(nm.dataset&&nm.dataset.auto==='1'&&nm.value===nm.dataset.last))){nm.value=swAutoName();if(nm.dataset){nm.dataset.auto='1';nm.dataset.last=nm.value}}
   var opts=[];
   (swBook.worksheets||[]).forEach(function(ws){
     opts.push('<option value="'+ws.name.replace(/"/g,'&quot;')+'">'+ws.name.replace(/</g,'&lt;')+'</option>');
   });
-  opts.push('<option value="__new__">➕ Create a new sheet'+(CUR==='A'?'': ' (shift A only)')+': '+swNewName().replace(/</g,'&lt;')+'</option>');
+  opts.push('<option value="__new__">➕ Create a new sheet: '+swNewName().replace(/</g,'&lt;')+'</option>');
   sel.innerHTML=opts.join('');
   var t=swDaySheet(swBook);
   sel.value=t?t.name:'__new__';
@@ -4331,7 +5083,7 @@ function swPlan(){
   var makeNew=(sel&&sel.value==='__new__');
   var nm=makeNew?swNewName():((sel&&sel.value)?sel.value:(t?t.name:swNewName()));
   var br=swBounds(CUR);
-  var blocked=(CUR!=='A'&&!t&&(makeNew||!(sel&&sel.value)));
+  var blocked=false;
   /* where do the rows of this shift go? the sheet of the day tells us */
   var where='the bags B'+br.st+'→B'+br.en,wsNow=t;
   if(wsNow){
@@ -4354,7 +5106,6 @@ async function swLoad(){
       });
     } else pickPromise=xlPickByInput();
     pickPromise.catch(function(){});
-    var ExcelJS=await xlEngine();
     var picked=null;
     try{picked=await pickPromise}
     catch(e){
@@ -4376,7 +5127,7 @@ async function swLoad(){
     swName=(handle&&handle.name)||(file&&file.name)||'workbook.xlsx';
     var sab=await file.arrayBuffer();
     swRaw=new Uint8Array(sab.slice(0));             /* the bytes of the file - we write into them */
-    swBook=await new ExcelJS.Workbook().xlsx.load(sab.slice(0));
+    swBook=await swReadBook(swRaw);                  /* read from the xml - no re-save, no ExcelJS */
     var note=document.getElementById('swNote');
     if(note)note.textContent=swHandle
       ? '🔒 The file stays open on this device — the rows are written into it directly, no download. Keep this tab open and you can write again any time.'
@@ -4446,19 +5197,14 @@ async function swWrite(){
   if(!swBook){swStatus('Open your workbook first.',true);return}
   try{
     swStatus('Writing into the Swing Noodles sheet…');
-    var ExcelJS=await xlEngine();
-    var book=swBook;
-    if(swHandle){                               /* always re-read the file from the disk */
-      var f=await swHandle.getFile();
-      book=await new ExcelJS.Workbook().xlsx.load(await f.arrayBuffer());
-    }
-    var raw=null;
+    var book=swBook,raw=null;
     if(swHandle){                               /* always re-read the file from the disk */
       var f=await swHandle.getFile();
       var ab=await f.arrayBuffer();
       raw=new Uint8Array(ab);
-      book=await new ExcelJS.Workbook().xlsx.load(ab.slice(0));
+      book=await swReadBook(raw);
     } else if(swRaw){ raw=swRaw; }
+    if(!raw)throw new Error('the file could not be read');
     swFresh=false;
     var sel=document.getElementById('swSheet');
     var makeNew=(sel&&sel.value==='__new__');
@@ -4492,10 +5238,21 @@ async function swWrite(){
     }
     var X=xs();
     var res,buf;
-    if(how==='created'||emptySheet){
-      /* the sheet of the day is new (or empty): it is built in a scratch
-         workbook and then put into the file - the rest of the workbook is not
-         touched. An empty sheet of the day is filled, not replaced by a new one */
+    var srcSheet=(how==='created'&&!emptySheet)?swSourceSheet(book):null;
+    if(srcSheet){
+      /* a NEW day: the newest sheet of the factory is copied (the format is
+         exactly the factory's) and the results of this shift are written into it */
+      var cl=await swCloneDay(raw,book,srcSheet,name,X);
+      res=cl.res;
+      if(!res.rows){swStatus('Nothing to write in this shift.',true);return}
+      buf=cl.buf;
+      var chk3=await swVerifyBuf(buf,name,cl.expect);
+      if(!chk3.ok)throw new Error(chk3.msg);
+      res.copiedFrom=srcSheet.name;
+    } else if(how==='created'||emptySheet){
+      /* no sheet of the factory to copy (or the sheet of the day is empty): it
+         is built in a scratch workbook and then put into the file */
+      var ExcelJS=await xlEngine();
       var scratch=new ExcelJS.Workbook();
       var sws=swCreateSheet(scratch,name);
       res=swWriteRows(sws,X);
@@ -4519,7 +5276,7 @@ async function swWrite(){
            bags:pl2.plan[0].key+'..'+pl2.plan[pl2.plan.length-1].key};
       if(!raw)throw new Error('the file could not be read again');
       buf=await ipSurgicalWrite(raw,name,wr,(sc2.refRow>2?sc2.refRow:(sc2.last>2?sc2.last:3)));
-      var chk2=await ipVerifyWritten(buf,name,res.rows,res.keys);
+      var chk2=await swVerifyBuf(buf,name,swExpect(pl2.plan));
       if(!chk2.ok)throw new Error(chk2.msg);
     }
     if(swHandle){
@@ -4536,7 +5293,7 @@ async function swWrite(){
     swStatus((swHandle?'✅ ':'⬇️ ')+res.rows+' bag(s) written to '+name+
       (res.bags?' ('+res.bags+')':'')+
       ' — only that sheet changed, the rest of the workbook is untouched'+
-      (how==='created'?(' — the sheet was created with the bags of the day (B'+res.from+'..B'+res.to+')'):' — the sheet of that day')+
+      (how==='created'?(' — a NEW sheet'+(res.copiedFrom?(' (a copy of "'+res.copiedFrom+'": same format)'):'')+' with the bags '+res.bags):' — the sheet of that day')+
       (res.dropped?(' ⚠ the day ends at B200 — '+res.dropped+' bag(s) did not fit'):'')+
       (swHandle?' — the file was updated in place (no download).':' — download the updated file and replace the old one.'));
   }catch(e){
@@ -4560,6 +5317,7 @@ function ensure(){
   var host=document.getElementById(HOST);
   if(host&&host.previousElementSibling===anchor)return;
   var h=document.createElement('div'); h.id=HOST; h.innerHTML=BOX;
+  if(document.body&&document.body.classList.contains('soapbg'))h.style.display='none';
   main.insertBefore(h,anchor.nextSibling);
   swBind();
 }
