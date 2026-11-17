@@ -1740,14 +1740,15 @@ function hasReactorRow(d){
 /* an hour is "registered" when it was recorded in the Reactor or in the Plodder;
    hours with nothing recorded stay out of the copied tables */
 function registeredRows(data){return data.filter(function(d){return hasReactorRow(d)||hasPlodderRow(d)})}
-function swingRows(data,X){
- var br=swBounds(CUR),st=br.st,en=br.en,tons=br.tons;
+function swingRows(data,X,overrideStartBag){
+ var br=swBounds(CUR),tons=(X&&X.swTons)?Math.round(+X.swTons):br.tons;
+ var st=(overrideStartBag!==undefined&&overrideStartBag!==null&&overrideStartBag>0)?overrideStartBag:br.st;
+ var en=(overrideStartBag!==undefined&&overrideStartBag!==null&&overrideStartBag>0)?(st+tons-1):br.en;
  var tol=parseFloat((X.rb||{}).tol);
  if(isNaN(tol)||tol<=0)tol=0.1;if(tol>0.1)tol=0.1;
  var swBias=tol/2; /* the Swing product is drier: its moisture is kept below the Plodder one */
  var SWM=0.05; /* and the average of the Swing sheet stays at least 0.05 % under the Plodder average */
- var defInc1=(st===1||((st-1)%5!==0));
- var inc1=(X.sw1!==undefined)?!!X.sw1:defInc1;
+ var inc1=(X.sw1!==undefined)?!!X.sw1:true;
  var swEx=X.sw||{};
  var firstY5R='',firstExCol='';
  data.forEach(function(d){
@@ -1878,37 +1879,45 @@ function swingRows(data,X){
  return{rows:rows,avgP:avgP,avgS:avgS};
 }
 function swingTableHTML(data,X){
- var sw=swingRows(data,X),rows=sw.rows,W=sumW(SCOLS),ht=14.25,tsv=[];
+ var sw=swingRows(data,X),rows=sw.rows,numW=42,W=sumW(SCOLS)+numW,ht=14.25,tsv=[];
  var h='<table class="swdata" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;width:'+W+'px"><colgroup>';
+ h+='<col width="'+numW+'" style="width:'+numW+'px">';
  SCOLS.forEach(function(c){h+='<col width="'+c.w+'" style="width:'+c.w+'px">'});
  h+='</colgroup>';
  h+='<tr style="height:14.25pt">';
+ h+='<td class="dv" style="width:'+numW+'px;height:14.25pt;background-color:#ffffff;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;border:none"></td>';
  var h1=[];
- SCOLS.forEach(function(c){
-  h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:#BDD7EE;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.h)+'</td>';
+ SCOLS.forEach(function(c,ci){
+  var bl=ci===0?'2px':'1px',br=ci===SCOLS.length-1?'2px':'1px';
+  h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:#BDD7EE;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:1px solid #000;border-left:'+bl+' solid #000;border-right:'+br+' solid #000">'+esc(c.h)+'</td>';
   h1.push(c.h);
  });
  h+='</tr><tr style="height:14.25pt">';
+ h+='<td class="dv" style="width:'+numW+'px;height:14.25pt;background-color:#ffffff;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;border:none"></td>';
  if(CUR==='A')tsv.push(h1.join('\t'));
  var h2=[];
- SCOLS.forEach(function(c){
+ SCOLS.forEach(function(c,ci){
   var bg=(c.sp||c.k==='G')?'#BDD7EE':'#ffffff';
-  h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:'+bg+';color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000">'+esc(c.sp)+'</td>';
+  var bl=ci===0?'2px':'1px',br=ci===SCOLS.length-1?'2px':'1px';
+  h+='<td class="dv" style="width:'+c.w+'px;height:14.25pt;background-color:'+bg+';color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:1px solid #000;border-bottom:2px solid #000;border-left:'+bl+' solid #000;border-right:'+br+' solid #000">'+esc(c.sp)+'</td>';
   h2.push(c.sp);
  });
  h+='</tr>';
  if(CUR==='A')tsv.push(h2.join('\t'));
- rows.forEach(function(r){
+ rows.forEach(function(r,ri){
   var line=[];
+  var bt=ri===0?'2px':'1px',bb=ri===rows.length-1?'2px':'1px';
   h+='<tr style="height:'+ht+'pt">';
-  SCOLS.forEach(function(c){
+  h+='<td class="dv" data-k="A" style="width:'+numW+'px;height:'+ht+'pt;background-color:#ffffff;color:#000000;font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:none;border-bottom:none;border-left:none;border-right:2px solid #000">'+esc(r.n)+'</td>';
+  SCOLS.forEach(function(c,ci){
    var val=r.v[c.k];if(val==null)val='';
    var isEd=(c.k!=='B'&&c.k!=='C'&&c.k!=='K');
    var bg=(c.k==='K')?'#BDD7EE':'#ffffff';
    var fg='#000000'; /* the red flag lives in data-red: only the exported Excel turns red */
    var mso=(c.k==='G'||c.k==='B')?'mso-number-format:\"\\@\";':'';
-   var st='width:'+c.w+'px;height:'+ht+'pt;background-color:'+bg+';color:'+fg+';font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:2px solid #000;border-bottom:2px solid #000;border-left:2px solid #000;border-right:2px solid #000;'+mso;
-   var attr=isEd?' contenteditable="true" class="ex" data-t="s" data-h="'+r.n+'" data-k="'+c.k+'"'+(r.auto[c.k]?' data-auto="1"':'')+((r.red&&r.red[c.k])?' data-red="1"':''):' class="dv"';
+   var bl=ci===0?'2px':'1px',br=ci===SCOLS.length-1?'2px':'1px';
+   var st='width:'+c.w+'px;height:'+ht+'pt;background-color:'+bg+';color:'+fg+';font-family:Arial,sans-serif;font-weight:bold;font-size:10pt;text-align:center;vertical-align:middle;white-space:nowrap;padding:0 2px;border-top:'+bt+' solid #000;border-bottom:'+bb+' solid #000;border-left:'+bl+' solid #000;border-right:'+br+' solid #000;'+mso;
+   var attr=isEd?' contenteditable="true" class="ex" data-t="s" data-h="'+r.n+'" data-k="'+c.k+'"'+(r.auto[c.k]?' data-auto="1"':'')+((r.red&&r.red[c.k])?' data-red="1"':''):' class="dv" data-k="'+c.k+'"';
    h+='<td'+attr+' style="'+st+'">'+esc(val)+'</td>';
    line.push(val);
   });
@@ -1981,7 +1990,7 @@ function isoFromDMY(s){var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||''
 var XDATE='';
 function curISO(){return XDATE||todayISO()}
 function curDMY(){return dmY(curISO())}
-function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child,#tS table.swdata tr>td:nth-child(2)');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
+function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child,#tS table.swdata tr>td[data-k="C"]');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
 var _day=todayISO();setInterval(function(){var d=todayISO();if(d!==_day){_day=d;refreshDates()}},30000);
 function dtxt(iso,fmt){var p=(iso||curISO()).split('-');return fmt==='mdy'?p[1]+'/'+p[2]+'/'+p[0]:p[2]+'/'+p[1]+'/'+p[0]}
 function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,a:a,c:c})});return out}
@@ -2139,7 +2148,7 @@ function buildSummary(m){
  m.appendChild(s);
  var sd=s.querySelector('#sd'),sf=s.querySelector('#sf'),sw1=s.querySelector('#sw1'),swTons=s.querySelector('#swTons'),swFrom=s.querySelector('#swFrom'),swTo=s.querySelector('#swTo');
  sd.value=curDMY();sf.value=X.fmt||'dmy';
- var b0=swBounds(CUR);sw1.checked=(X.sw1!==undefined)?!!X.sw1:(b0.st===1||((b0.st-1)%5!==0));
+ var b0=swBounds(CUR);sw1.checked=(X.sw1!==undefined)?!!X.sw1:true;
  sw1.onchange=function(){putX(function(o){o.sw1=sw1.checked});renderSummary()};
  swTons.onchange=function(){var v=Math.max(1,parseInt(swTons.value,10)||60);putX(function(o){o.swTons=v;delete o.swTo});renderSummary()};
  swFrom.onchange=function(){var v=Math.max(1,parseInt(swFrom.value,10)||1);putX(function(o){o.swFrom=v;if(o.swTo!==undefined&&o.swTo<v)delete o.swTo});renderSummary()};
@@ -2180,21 +2189,32 @@ function toXlsx(sheets){
  var fonts=['<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'],fk={},fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],lk={},borders=['<border><left/><right/><top/><bottom/><diagonal/></border>'],bk={},xfs=['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'],xk={};
  function font(sz,color,fn){var nm=fn||'Times New Roman',fam=nm==='Arial'?2:1,k=sz+'|'+color+'|'+nm;if(fk[k]===undefined){fk[k]=fonts.length;fonts.push('<font><b/><sz val="'+sz+'"/><color rgb="FF'+color+'"/><name val="'+nm+'"/><family val="'+fam+'"/></font>')}return fk[k]}
  function fill(c){if(!c)return 0;if(lk[c]===undefined){lk[c]=fills.length;fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FF'+c+'"/><bgColor indexed="64"/></patternFill></fill>')}return lk[c]}
- function sd(n,v){return '<'+n+' style="'+v+'"><color rgb="FF000000"/></'+n+'>'}
- function bord(t,b,l,r){var k=[t,b,l,r].join();if(bk[k]===undefined){bk[k]=borders.length;borders.push('<border>'+sd('left',l)+sd('right',r)+sd('top',t)+sd('bottom',b)+'<diagonal/></border>')}return bk[k]}
- function xf(c){var k=[c.fs,c.color,c.fill,c.bt,c.bb,c.bl,c.br,c.fmt,c.fn||''].join('|');if(xk[k]===undefined){xk[k]=xfs.length;xfs.push('<xf numFmtId="'+(c.fmt||0)+'" fontId="'+font(c.fs,c.color,c.fn)+'" fillId="'+fill(c.fill)+'" borderId="'+bord(c.bt,c.bb,c.bl,c.br)+'" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>')}return xk[k]}
+ function sd(n,v){return v?('<'+n+' style="'+v+'"><color rgb="FF000000"/></'+n+'>'):('<'+n+'/>')}
+ function bord(t,b,l,r){var k=[t||'',b||'',l||'',r||''].join();if(bk[k]===undefined){bk[k]=borders.length;borders.push('<border>'+sd('left',l)+sd('right',r)+sd('top',t)+sd('bottom',b)+'<diagonal/></border>')}return bk[k]}
+ function xf(c){var k=[c.fs,c.color,c.fill,c.bt||'',c.bb||'',c.bl||'',c.br||'',c.fmt,c.fn||''].join('|');if(xk[k]===undefined){xk[k]=xfs.length;xfs.push('<xf numFmtId="'+(c.fmt||0)+'" fontId="'+font(c.fs,c.color,c.fn)+'" fillId="'+fill(c.fill)+'" borderId="'+bord(c.bt,c.bb,c.bl,c.br)+'" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>')}return xk[k]}
  var NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',RN='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
  var sheetXml=sheets.map(function(sh){
-  var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="3" customWidth="1"/>';
+  var col1W=sh.col1Width||3;
+  var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="'+col1W+'" customWidth="1"/>';
   sh.widths.forEach(function(w,i){x+='<col min="'+(i+2)+'" max="'+(i+2)+'" width="'+w+'" customWidth="1"/>'});
   x+='</cols><sheetData>';
   sh.rows.forEach(function(r,ri){x+='<row r="'+(ri+1)+'" ht="'+r.ht+'" customHeight="1">';
+   if(r.colA!==undefined&&r.colA!==null){
+    var sA=xf({fs:10,fn:'Arial',color:'000000',fill:null,bt:'',bb:'',bl:'',br:'',fmt:0});
+    if(r.colA==='')x+='<c r="A'+(ri+1)+'" s="'+sA+'"/>';
+    else if(typeof r.colA==='number')x+='<c r="A'+(ri+1)+'" s="'+sA+'"><v>'+r.colA+'</v></c>';
+    else x+='<c r="A'+(ri+1)+'" s="'+sA+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(r.colA)+'</t></is></c>';
+   }
    r.cells.forEach(function(c,ci){var ref=colL(ci+1)+(ri+1),s=xf(c);
     if(c.v===''||c.v===null||c.v===undefined)x+='<c r="'+ref+'" s="'+s+'"/>';
     else if(typeof c.v==='number')x+='<c r="'+ref+'" s="'+s+'"><v>'+c.v+'</v></c>';
     else x+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(c.v)+'</t></is></c>'});
    x+='</row>'});
-  return x+'</sheetData></worksheet>'}); 
+  x+='</sheetData>';
+  if(sh.merges&&sh.merges.length){
+   x+='<mergeCells count="'+sh.merges.length+'">'+sh.merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>';
+  }
+  return x+'</worksheet>'}); 
  var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet '+NS+'><numFmts count="3"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="mm/dd/yyyy"/><numFmt numFmtId="166" formatCode="h:mm"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+borders.length+'">'+borders.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
  var wbx='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook '+NS+' '+RN+'><sheets>'+sheets.map(function(sh,i){return '<sheet name="'+xesc(sh.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+'</sheets></workbook>';
  var rel='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map(function(sh,i){return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+'<Relationship Id="rId'+(sheets.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
@@ -2206,25 +2226,98 @@ function toXlsx(sheets){
 }
 function rgbHex(v){if(!v)return null;var m=/rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(v);if(m){return [m[1],m[2],m[3]].map(function(n){return ('0'+(+n).toString(16)).slice(-2)}).join('').toUpperCase()}m=/#([0-9a-fA-F]{6})/.exec(v);return m?m[1].toUpperCase():null}
 function bwid(v){return parseFloat(v)>=2?'medium':'thin'}
+function shiftHourDataFromStore(shKey){
+ if(shKey===CUR)return registeredRows(hourData());
+ var all=load()[shKey]||{},hrs=SH[shKey]||[],out=[];
+ hrs.forEach(function(h,i){
+  var sv=all[h];if(!sv||!sv.v)return;
+  var samp=(i===0||i===3),on=(sv.ck!==undefined)?!!sv.ck:samp;
+  out.push({h:h,own:!!(on&&sv.v.length>=12),a:sv.v});
+ });
+ return registeredRows(out);
+}
+function extractSwingSheet(name){
+ var tb=document.querySelector('#tS table.swdata');if(!tb)return null;
+ var X=xs(),iso=curISO(),dateStr=dtxt(iso,X.fmt);
+ var widths=SCOLS.map(function(c){return Math.round((c.w-5)/7*10)/10});
+ var byBag={},domBags=[];
+ /* Read ONLY the current shift's rows from the #tS table (including any live edits) */
+ [].forEach.call(tb.querySelectorAll('tr'),function(tr){
+  var bTd=tr.querySelector('td[data-k="B"]');if(!bTd)return;
+  var bno=parseInt(String(bTd.textContent||'').replace(/[^0-9]/g,''),10);
+  if(!bno||bno<1)return;
+  var v={},red={};
+  SCOLS.forEach(function(c){
+   var td=tr.querySelector('td[data-k="'+c.k+'"]');
+   if(!td)return;
+   var txt=td.textContent.replace(/\u00a0/g,'');
+   v[c.k]=(c.k==='I'||c.k==='J')?txt:txt.trim();
+   if(td.getAttribute('data-red')==='1')red[c.k]=1;
+  });
+  byBag[bno]={v:v,red:red};
+  domBags.push(bno);
+ });
+ if(!domBags.length){
+  var swFallback=swingRows(registeredRows(hourData()),X);
+  swFallback.rows.forEach(function(r){
+   byBag[r.n]={v:Object.assign({},r.v),red:Object.assign({},r.red||{})};
+   domBags.push(r.n);
+  });
+ }
+ var rows=[],merges=[];
+ /* Row 1 & Row 2: Header rows matching the original factory Swing sheet */
+ var hCells1=[],hCells2=[];
+ SCOLS.forEach(function(c,ci){
+  var bl=ci===0?'medium':'thin',br=ci===SCOLS.length-1?'medium':'thin';
+  hCells1.push({fs:10,fn:'Arial',color:'000000',fill:'BDD7EE',bt:'medium',bb:'thin',bl:bl,br:br,v:c.h,fmt:0});
+  var fill2=(c.sp||c.k==='G')?'BDD7EE':null;
+  hCells2.push({fs:10,fn:'Arial',color:'000000',fill:fill2,bt:'thin',bb:'thin',bl:bl,br:br,v:c.sp||'',fmt:0});
+  if(!c.sp){var colLet=colL(ci+1);merges.push(colLet+'1:'+colLet+'2')}
+ });
+ rows.push({ht:14.25,colA:null,cells:hCells1});
+ rows.push({ht:14.25,colA:null,cells:hCells2});
+ /* For Shift A: build full sheet B1..B200 with Shift A's data and empty numbered/dated cells up to B200.
+    For Shift B & Shift C: export ONLY that shift's own rows, with side numbering matching each bag.
+    No thick border separating between shifts — only the first row has top:'medium' and the last row has bottom:'medium'. */
+ var bagList=[];
+ if(CUR==='A'){
+  for(var n=1;n<=200;n++)bagList.push(n);
+ }else{
+  bagList=domBags.slice();
+ }
+ var totalRows=bagList.length;
+ bagList.forEach(function(n,idx){
+  var rec=byBag[n],bt=(idx===0)?'medium':'thin',bb=(idx===totalRows-1)?'medium':'thin',rCells=[];
+  SCOLS.forEach(function(c,ci){
+   var bl=ci===0?'medium':'thin',br=ci===SCOLS.length-1?'medium':'thin';
+   var val='';
+   if(c.k==='B')val='B'+n;
+   else if(c.k==='C')val=dateStr;
+   else if(rec&&rec.v[c.k]!==undefined&&rec.v[c.k]!==null)val=rec.v[c.k];
+   var isRed=!!(rec&&rec.red&&rec.red[c.k]);
+   var vOut=val;
+   if(c.k!=='B'&&c.k!=='C'&&c.k!=='G'&&vOut!==''&&/^-?\d+(\.\d+)?$/.test(String(vOut).trim()))vOut=parseFloat(String(vOut).trim());
+   rCells.push({fs:10,fn:'Arial',color:isRed?'FF0000':'000000',fill:null,bt:bt,bb:bb,bl:bl,br:br,v:vOut,fmt:0});
+  });
+  rows.push({ht:14.25,colA:n,cells:rCells});
+ });
+ return {name:name,col1Width:5,widths:widths,rows:rows,merges:merges};
+}
 function extractSheet(kind,name){
- var tb=document.querySelector(kind==='S'?'#tS table.swdata':'#t'+kind+' table');if(!tb)return null;
+ if(kind==='S')return extractSwingSheet(name);
+ var tb=document.querySelector('#t'+kind+' table');if(!tb)return null;
  var X=xs(),iso=curISO(),p=iso.split('-'),serial=Math.round(Date.UTC(+p[0],+p[1]-1,+p[2])/86400000)+25569,dfmt=X.fmt==='mdy'?165:164;
- var cols=kind==='R'?RCOLS:(kind==='P'?PCOLS:SCOLS),widths=cols.map(function(c){return Math.round((c.w-5)/7*10)/10});
+ var cols=kind==='R'?RCOLS:PCOLS,widths=cols.map(function(c){return Math.round((c.w-5)/7*10)/10});
  var rows=[];
  [].forEach.call(tb.querySelectorAll('tr'),function(tr){
   var ht=parseFloat(tr.style.height)||15,cells=[];
   [].forEach.call(tr.children,function(td,i){
    var st=td.style,t=td.textContent.replace(/\u00a0/g,''),tTrim=t.trim(),fs=st.fontSize,sz=/pt/.test(fs)?parseFloat(fs):parseFloat(fs)*0.75;
    var fillc=rgbHex(st.backgroundColor);if(fillc==='FFFFFF')fillc=null;
-   var c={fs:sz||11,fn:kind==='S'?'Arial':'Times New Roman',color:td.getAttribute('data-red')==='1'?'FF0000':(rgbHex(st.color)||'000000'),fill:fillc,bt:bwid(st.borderTopWidth),bb:bwid(st.borderBottomWidth),bl:bwid(st.borderLeftWidth),br:bwid(st.borderRightWidth),v:kind==='S'&&(i===7||i===8)?t:tTrim,fmt:0};
-   if(kind==='S'){
-    if(i===1&&/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(tTrim)){c.v=serial;c.fmt=dfmt}
-    else if(i>=2&&i<=6&&/^-?\d+(\.\d+)?$/.test(tTrim))c.v=parseFloat(tTrim);
-   }else{
-    if(i===0){c.v=serial;c.fmt=dfmt}
-    else if(i===1){var m=/^(\d+):(\d+)$/.exec(tTrim);c.v=m?(+m[1]*60+ +m[2])/1440:tTrim;c.fmt=m?166:0}
-    else if(/^-?\d+(\.\d+)?$/.test(tTrim))c.v=parseFloat(tTrim);
-   }
+   var c={fs:sz||11,fn:'Times New Roman',color:td.getAttribute('data-red')==='1'?'FF0000':(rgbHex(st.color)||'000000'),fill:fillc,bt:bwid(st.borderTopWidth),bb:bwid(st.borderBottomWidth),bl:bwid(st.borderLeftWidth),br:bwid(st.borderRightWidth),v:tTrim,fmt:0};
+   if(i===0){c.v=serial;c.fmt=dfmt}
+   else if(i===1){var m=/^(\d+):(\d+)$/.exec(tTrim);c.v=m?(+m[1]*60+ +m[2])/1440:tTrim;c.fmt=m?166:0}
+   else if(/^-?\d+(\.\d+)?$/.test(tTrim))c.v=parseFloat(tTrim);
    cells.push(c)});
   rows.push({ht:ht,cells:cells})});
  return {name:name,widths:widths,rows:rows};
@@ -3193,6 +3286,8 @@ async function xlWrite(){
     if(!raw)throw new Error('the file could not be read again');
     /* ONLY our rows go into the file - the format of the workbook stays as it is */
     var buf=await ipSurgicalWrite(raw,ws.name,writes,tmpl.ref);
+    xlRaw=new Uint8Array(buf);
+    xlBook=await new ExcelJS.Workbook().xlsx.load(xlRaw.buffer.slice(xlRaw.byteOffset,xlRaw.byteOffset+xlRaw.byteLength));
     if(xlHandle){
       var w=await xlHandle.createWritable();
       await w.write(buf); await w.close();
@@ -3273,14 +3368,31 @@ var ipBook=null, ipHandle=null, ipName='', ipFresh=false, ipRaw=null;
 
 /* the sheet name carries the day: "PKOL(85-15) 9-11-2026" */
 /* the hour of a row (the Time column) */
-function ipHourOf(ws,r){
-  var v=ws.getCell(r,3).value;
+function ipParseHourVal(v){
   if(v==null||v==='')return null;
   if(v instanceof Date)return v.getUTCHours();
-  /* a time that was formatted as text is still a serial number in the file */
-  if(typeof v==='number'){var h=Math.round(v*24); return (h>=0&&h<24)?h:null;}
-  var m=String(v).match(/(\d{1,2}):(\d{2})/);
-  return m? +m[1]:null;
+  if(typeof v==='object'&&v.result!==undefined)return ipParseHourVal(v.result);
+  if(typeof v==='object'&&v.richText)v=v.richText.map(function(t){return t.text}).join('');
+  if(typeof v==='number'){
+    if(!isFinite(v)||v<0)return null;
+    if(v>=0&&v<1){var h0=Math.round(v*24)%24;return (h0>=0&&h0<24)?h0:null}
+    if(v>=1&&v<24&&Math.abs(v-Math.round(v))<1e-6)return Math.round(v);
+    if(v>20000){var frac=v-Math.floor(v);var h1=Math.round(frac*24)%24;return (h1>=0&&h1<24)?h1:null}
+    return null;
+  }
+  var s=String(v).trim();
+  var m=s.match(/(\d{1,2}):(\d{2})/);
+  if(m){
+    var hh=+m[1];
+    if(/pm/i.test(s)&&hh<12)hh+=12;
+    else if(/am/i.test(s)&&hh===12)hh=0;
+    return (hh>=0&&hh<24)?hh:null;
+  }
+  if(/^\d{1,2}$/.test(s)){var hi=+s;return (hi>=0&&hi<24)?hi:null}
+  return null;
+}
+function ipHourOf(ws,r){
+  return ipParseHourVal(ws.getCell(r,3).value);
 }
 function ipDMY(iso){
   var p=String(iso||curISO()).split('-');
@@ -3887,8 +3999,12 @@ function ipColOrder(cols){
    the value AND the format of the factory. A cell we write takes the format
    of the reference row of the factory (and the red / the number format / the
    thick edge we ask for). */
-function ipApplyWrites(z,xml,writes,refRow){
-  var ref=ipFindRow(xml,refRow);
+function ipApplyWrites(z,xml,writes,refRow,preRef){
+  var ref=ipFindRow(xml,refRow)||preRef;
+  if(!ref){
+    var anyRow=/<row\b[^>]*\br="(\d+)"/.exec(xml);
+    if(anyRow)ref=ipFindRow(xml,+anyRow[1]);
+  }
   if(!ref)throw new Error('the reference row of the sheet was not found');
   var byRow={},k,maxRow=0;
   for(k=0;k<writes.length;k++){
@@ -3938,6 +4054,8 @@ function ipApplyWrites(z,xml,writes,refRow){
     var srcCols=Object.keys(src.cells);
     var defS='0';
     ['D','E','F','G','H','I','C','B'].forEach(function(ck){if(defS==='0'&&src.cells[ck]&&src.cells[ck].s)defS=src.cells[ck].s});
+    var colAMatch=/<c\b[^>]*\br="A\d+"[^>]*\bs="(\d+)"/.exec(xml);
+    var colADefS=colAMatch?colAMatch[1]:'0';
     /* every column of the row in strict ascending column order (A, B, C...) */
     var all={},ci2;
     for(ci2=0;ci2<srcCols.length;ci2++)all[srcCols[ci2]]=1;
@@ -3951,7 +4069,7 @@ function ipApplyWrites(z,xml,writes,refRow){
     }
     var cols=ipColOrder(Object.keys(all));
     for(ci=0;ci<cols.length;ci++){
-      var col=cols[ci],rc=src.cells[col]||keep[col],s=(rc&&rc.s!==''&&rc.s!==undefined)?rc.s:defS;
+      var col=cols[ci],rc=src.cells[col]||keep[col],s=(rc&&rc.s!==''&&rc.s!==undefined)?rc.s:(col==='A'?colADefS:defS);
       if(Object.prototype.hasOwnProperty.call(bw.vals,col)){
         if(bw.red[col]){var rs=ipRedStyle(z,+s,{red:true});if(rs!==null&&rs!==undefined)s=String(rs)}
         if(bw.fmt&&bw.fmt[col]){var fs=ipRedStyle(z,+s,{numFmt:bw.fmt[col]});if(fs!==null&&fs!==undefined)s=String(fs)}
@@ -3992,32 +4110,17 @@ function ipApplyWrites(z,xml,writes,refRow){
   return xml;
 }
 var IP_RNS='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ';
-/* the rows of the source sheet we copy into the new sheet of the day:
-   the header (rows 1..9) and one row per hour of the day. The rows of the
-   OLD day are taken out - the new sheet holds the day, empty. */
+/* the rows of the source sheet we copy into a new sheet of the day:
+   only the factory header (rows 1..9) is kept, and each shift writes its
+   7 hours starting at row 10 */
 function ipNewSheetPlan(src){
-  var HR=9, hours=[], keep={};
-  /* the header always stays - even the rows of the header that are empty but
-     have a format (the title of the report) */
+  var HR=9, keep={};
   for(var i=1;i<=HR;i++)keep[i]=1;
-  src.eachRow({includeEmpty:false},function(row,rn){
-    if(rn<=HR)return;
-    var h=ipHourOfRow(src,rn);
-    if(h==null)return;
-    hours.push({rn:rn,h:h});
-    keep[rn]=1;
-  });
-  hours.sort(function(a,b){return a.h-b.h});
-  return {keep:keep,hours:hours,headerRow:HR};
+  return {keep:keep,hours:[],headerRow:HR};
 }
 /* the hours of a row of the In Process Report (the Time column) */
 function ipHourOfRow(ws,r){
-  var v=ws.getCell(r,3).value;
-  if(v==null||v==='')return null;
-  if(v instanceof Date)return v.getUTCHours();
-  if(typeof v==='number'){var h=Math.round(v*24);return (h>=0&&h<24)?h:null;}
-  var m=String(v).match(/(\d{1,2}):(\d{2})/);
-  return m?+m[1]:null;
+  return ipParseHourVal(ws.getCell(r,3).value);
 }
 /* a NEW sheet: the sheet of the factory COPIED, but with the rows of the old
    day taken out - only the header and the hours of the day stay (empty, ready
@@ -4028,6 +4131,7 @@ async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow,dropRows){
   if(!srcPath)throw new Error('the sheet "'+srcName+'" was not found inside the file');
   var xml=new TextDecoder().decode(z.data[srcPath]);
   xml=xml.replace(/\stabSelected="1"/g,'');   /* two selected tabs = grouped sheets: every edit would hit both */
+  var preRef=ipFindRow(xml,refRow);
   /* only the header and the rows of the hours of the day stay - the rows of
      the old day and the empty rows at the end of the sheet go away */
   if(dropRows){
@@ -4050,7 +4154,7 @@ async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow,dropRows){
       return '<dimension ref="'+c1+r1+':'+c2+r2+'"/>';
     });
   }
-  xml=ipApplyWrites(z,xml,writes,refRow);
+  xml=ipApplyWrites(z,xml,writes,refRow,preRef);
   /* a free name for the new part */
   var n=1,part,base='';
   while(true){
@@ -4084,77 +4188,94 @@ async function ipCreateSheetWrite(raw,srcName,newName,writes,refRow,dropRows){
   var ct=new TextDecoder().decode(z.data['[Content_Types].xml']);
   var ov='<Override PartName="/'+part+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
   z.data['[Content_Types].xml']=new TextEncoder().encode(ct.replace('</Types>',ov+'</Types>'));
+  ipSanitizeWorkbook(z);
   return await ipZipClose(z);
 }
-/* write the hours of the shift into the sheet */
-function ipWriteHours(ws,data,X,byHour){
+/* does a row in the In Process Report actually contain recorded Reactor data? */
+function ipRowHasReactorData(ws,rn){
+  for(var c=5;c<=19;c++){
+    var v=ws.getCell(rn,c).value;
+    if(v==null)continue;
+    if(typeof v==='object'&&v.result!==undefined)v=v.result;
+    var s=String(v==null?'':v).trim();
+    if(s!==''&&s.toUpperCase()!=='N/A')return true;
+  }
+  return false;
+}
+/* write the 7 hours of the shift into the sheet */
+function ipWriteHours(ws,data,X,startAtRow){
   var tmpl=ipRowTemplate(ws);      /* the clean format of the sheet */
-  var map={},first=xlNextRow(ws,2,19);  /* the first free row - under the last row with data */
   var today=ipTodaySerial();
-  ws.eachRow({includeEmpty:false},function(row,rn){
-    var h=ipHourOf(ws,rn);
-    if(h==null)return;
-    var k=ipDataKey(ws,rn,h);
-    if(k!=null&&map[k]==null)map[k]=rn;
-  });
+  var map={},emptyHourRows={},lastOccupied=9;
+  if(!startAtRow){
+    ws.eachRow({includeEmpty:false},function(row,rn){
+      if(rn<=9)return;
+      var h=ipHourOf(ws,rn);
+      var d=xlDateVal(ws.getCell(rn,2).value);
+      var hasData=ipRowHasReactorData(ws,rn);
+      if(d!=null&&h!=null){
+        var k=d+'|'+h;
+        if(map[k]==null)map[k]=rn;
+      }
+      if(hasData||(d!=null&&h!=null)){
+        if(rn>lastOccupied)lastOccupied=rn;
+      } else if(h!=null&&emptyHourRows[h]==null&&rn>lastOccupied){
+        emptyHourRows[h]=rn;
+      }
+    });
+  }
+  var first=startAtRow||(lastOccupied+1);
+  if(first<=9)first=10;
+  /* Check if all 7 hours of this shift already exist in map for today, or in pre-filled empty hour template rows */
+  var allInMap=data.length>0&&data.every(function(d){return map[today+'|'+d.h]!=null});
+  var allInEmpty=!allInMap&&data.length>0&&data.every(function(d){return emptyHourRows[+d.h]!=null});
   var done=[],writes=[];
-  data.forEach(function(d){
-    var v=vals('r',d,X);
-    if(!v)return;
-    var h=+d.h, key=today+'|'+h, r=map[key];
-    if(byHour&&byHour[h]!=null){
-      /* the sheet of the day: the hour goes into the row of that hour */
-      r=byHour[h];
-    } else if(r==null){              /* that hour of that day is not on the sheet yet -> add it */
+  data.forEach(function(d,idx){
+    var h=+d.h, key=today+'|'+h, r;
+    if(startAtRow){
+      r=startAtRow+idx;
+    } else if(allInMap){
+      r=map[key];
+    } else if(allInEmpty){
+      r=emptyHourRows[h];
+    } else if(map[key]!=null){
+      r=map[key];
+      if(r>=first)first=r+1;
+    } else {
       r=first;
-      first=r+1; map[key]=r;
+      first=r+1;
+      map[key]=r;
     }
-    /* only the DATA is collected here - the format of the rows comes from the
-       file itself (the reference row of the factory) */
-    var w={row:r,h:h,vals:{},red:{},edge:'Q'};
-    for(var c=2;c<=17;c++){          /* B..Q = the columns of the report */
+    var hasRec=hasReactorRow(d);
+    var v=vals('r',d,X);
+    var w={row:r,h:h,vals:{A:null},red:{},fmt:{B:'dd/mm/yyyy',C:'h:mm'},ref:tmpl.ref};
+    for(var c=2;c<=19;c++){          /* B..S = all 18 columns of the Reactor report */
       var L=String.fromCharCode(64+c);
-      var val=v.v[L];
-      if(L==='B'){ val=ipDMY(curISO()); }
+      var val=v&&v.v?v.v[L]:null;
+      if(L==='B'){ val=today; }
       else if(L==='C'){ val=xlSerialTime(h,0); }
+      else if(L==='D'){ val='Reactor'; }
+      else if(!hasRec&&(val==null||val===''||val==='N/A')){ val='N/A'; if(L==='R'||L==='S'||L==='G'||L==='H'||L==='I')val=null; }
       else if(val==null||val===''){ val=null; }
       else if(typeof val==='number'){ /* keep the number */ }
       else if(/^-?\d+(\.\d+)?$/.test(String(val).trim())){ val=parseFloat(val); }
       else { val=String(val); }
       w.vals[L]=val;
-      if(v.red&&v.red[L])w.red[L]=1;
+      if(v&&v.red&&v.red[L])w.red[L]=1;
     }
+    if(idx===data.length-1)w.thick=1;
     writes.push(w);
     done.push(pad(h));
   });
-  /* the thick line under the last hour of every shift - the way the factory
-     draws it (the thick bottom of the row), never a border we invent */
-  var lastOf={};
-  writes.forEach(function(w){
-    var b=ipBlockOf(w.h);
-    if(!b)return;
-    if(!lastOf[b]||w.h>lastOf[b].h)lastOf[b]={h:w.h,row:w.row};
-  });
-  writes.forEach(function(w){
-    var b=ipBlockOf(w.h);
-    if(b&&lastOf[b]&&lastOf[b].row===w.row)w.thick=1;
-  });
   return {rows:done,hours:done.join(','),writes:writes,ref:tmpl.ref};
 }
-/* the format of the data rows - taken from the sheet itself (the hand-made
-   first data row) and cleaned up, so the rows we write look EXACTLY like the
-   factory ones even if the rows we paste into have a broken format:
-     - the font, the alignment, the number format and the fill of every column
-     - the height of the row
-   The borders are handled by ipBlockBorders() (the thick line between the
-   shifts and the medium line on the left of the date column). */
+/* the format of the data rows - taken from the sheet itself (a clean non-red
+   data row) so the 7 rows we write look EXACTLY like the factory ones */
 function ipRowKey(ws,rn){
   var parts=[];
   for(var c=2;c<=19;c++){
     var st=ws.getCell(rn,c).style||{};
     var f=st.font||{},a=st.alignment||{};
-    /* only the properties a person can see - the colours are taken from the
-       row that wins, so two rows with the same look are one group */
     parts.push([f.name||'',f.size||'',f.bold?'b':'',f.italic?'i':'',
                 a.horizontal||'',a.vertical||'',st.numFmt||'',
                 (st.fill&&st.fill.type)?'f':''].join('|'));
@@ -4162,21 +4283,23 @@ function ipRowKey(ws,rn){
   return parts.join('#');
 }
 function ipRowTemplate(ws){
-  var rows=[];
+  var rows=[],cleanRows=[];
   ws.eachRow({includeEmpty:false},function(row,rn){
     if(rn<=9)return;
     if(ipHourOf(ws,rn)==null)return;
     rows.push(rn);
+    var faVal=num(ws.getCell(rn,9).value);
+    var mVal=num(ws.getCell(rn,7).value);
+    if(mVal!==null&&(faVal===null||faVal<=0.08))cleanRows.push(rn);
   });
-  /* the MOST COMMON format of the rows wins - a broken row (a wrong font, a
-     colour, a text format...) can never change the format of what we write */
+  var pool=cleanRows.length?cleanRows:rows;
   var counts={},best=null,bestN=0;
-  rows.forEach(function(rn){
+  pool.forEach(function(rn){
     var k=ipRowKey(ws,rn);
     counts[k]=(counts[k]||0)+1;
     if(counts[k]>bestN){bestN=counts[k];best=rn}
   });
-  var ref=best||rows[0]||10, cols={},h=null;
+  var ref=best||pool[0]||rows[0]||10, cols={},h=null;
 
   /* the height: the most common one of the rows */
   var hn={},hb=null,hbN=0;
@@ -4220,45 +4343,20 @@ function ipCellStyle(t,isTop,isBot){
    every shift of the day is ONE box (thin inside, thick around) - columns B..S.
    planHours = the rows of a NEW sheet of the day; otherwise the rows of today's
    shifts that were written are boxed (all the rows of that shift on the sheet). */
-function ipBoxWrites(ws,writes,planHours){
-  var OUT=XL_OUTER,HR=9,blocks={},touched={},b,c,L;
-  function add(bk,rn){if(!bk)return;(blocks[bk]=blocks[bk]||{})[rn]=1}
-  if(planHours){
-    planHours.forEach(function(x){add(ipBlockOf(x.h),x.rn);touched[ipBlockOf(x.h)]=1});
-  } else {
-    var today=ipTodaySerial();
-    ws.eachRow({includeEmpty:false},function(row,rn){
-      if(rn<=HR)return;
-      var h=ipHourOf(ws,rn); if(h==null)return;
-      var d=xlDateVal(ws.getCell(rn,2).value);
-      if(d!=null&&String(d)!==String(today))return;
-      add(ipBlockOf(h),rn);
-    });
-    writes.forEach(function(w){var bk=ipBlockOf(w.h);if(bk){add(bk,w.row);touched[bk]=1}});
-  }
-  var byRow={};
-  writes.forEach(function(w){byRow[w.row]=byRow[w.row]||[];byRow[w.row].push(w)});
-  var extra=[];
-  Object.keys(blocks).forEach(function(bk){
-    if(!touched[bk])return;
-    var rows=Object.keys(blocks[bk]).map(Number).sort(function(a,b2){return a-b2});
-    var r1=rows[0],r2=rows[rows.length-1];
-    rows.forEach(function(rn){
-      var bd={};
-      for(c=2;c<=19;c++){
-        L=colL(c-1);
-        bd[L]={top:rn===r1?OUT:'thin',bottom:rn===r2?OUT:'thin',left:c===2?OUT:'thin',right:c===19?OUT:'thin'};
-      }
-      bd[colL(0)]={right:OUT};          /* column A, on the left of the box */
-      bd[colL(19)]={left:OUT};          /* column T, on the right of the box */
-      if(byRow[rn]){byRow[rn].forEach(function(w){w.edge=null;w.bd=w.bd||{};Object.keys(bd).forEach(function(k2){w.bd[k2]=bd[k2]})})}
-      else extra.push({row:rn,vals:{},red:{},sideOnly:1,bd:bd});
-    });
-    /* the facing edges just outside the box (never the header rows) */
-    if(r1-1>HR){var tp={row:r1-1,vals:{},red:{},sideOnly:1,bd:{}};for(c=2;c<=19;c++)tp.bd[colL(c-1)]={bottom:OUT};extra.push(tp)}
-    var bt={row:r2+1,vals:{},red:{},sideOnly:1,bd:{}};for(c=2;c<=19;c++)bt.bd[colL(c-1)]={top:OUT};extra.push(bt);
+function ipBoxWrites(ws,writes){
+  if(!writes||!writes.length)return writes;
+  var OUT=XL_OUTER,c,L;
+  var rows=writes.map(function(w){return w.row}).sort(function(a,b){return a-b});
+  var r1=rows[0],r2=rows[rows.length-1];
+  writes.forEach(function(w){
+    var rn=w.row,bd={};
+    for(c=2;c<=19;c++){
+      L=colL(c-1);
+      bd[L]={top:rn===r1?OUT:'thin',bottom:rn===r2?OUT:'thin',left:c===2?OUT:'thin',right:c===19?OUT:'thin'};
+    }
+    w.edge=null;
+    w.bd=bd;
   });
-  extra.forEach(function(e){writes.push(e)});
   return writes;
 }
 /* which shift does this hour belong to? (00:00 belongs to shift C) */
@@ -4426,40 +4524,23 @@ async function ipWrite(){
       existed=ipFindSheetByName(book,todayName);
       if(existed){ws=existed;name=todayName}   /* the sheet of today is already there -> fill it */
     }
-    var X=xs(), data=registeredRows(hourData());   /* the very rows the Excel export writes */
-    /* the sheet of the day: the row of every hour of the day */
-    var plan=newMode&&!existed?ipNewSheetPlan(ws):null;
-    var byHour=null;
-    if(plan){
-      byHour={};
-      plan.hours.forEach(function(x){if(byHour[x.h]==null)byHour[x.h]=x.rn});
-    }
-    var res=ipWriteHours(ws,data,X,byHour);
+    var X=xs(), allHours=hourData();               /* always the 7 hours of the current shift */
+    if(!allHours.length){ipStatus('Nothing to write in this shift.',true);return}
+    var plan=(newMode&&!existed)?ipNewSheetPlan(ws):null;
+    var res=ipWriteHours(ws,allHours,X,plan?10:null);
     if(!res.rows.length){ipStatus('Nothing to write in this shift.',true);return}
-    if(!plan)ipBoxWrites(ws,res.writes,null);     /* the shift boxes of the sheet that was already there */
+    ipBoxWrites(ws,res.writes);                    /* clean box around the 7 hours of the shift */
     if(!raw)throw new Error('the file could not be read again');
     /* ONLY our rows go into the file - the format of the workbook stays as it is */
     var buf;
     if(newMode&&!existed){
-      /* a sheet of the day that is CLEAN: the header of the factory and the
-         hours of the day, empty. The rows of the old day are taken out. */
-      var emptyWrites=[];
-      plan.hours.forEach(function(x){
-        var w={row:x.rn,vals:{},red:{},ref:res.ref};
-        w.vals['B']=ipDMY(curISO());          /* the date of today */
-        w.vals['C']=xlSerialTime(x.h,0);      /* the hour of the row */
-        /* the results of the old day are cleared - the sheet is empty and
-           every shift puts its own numbers in its own rows */
-        for(var dc=5;dc<=19;dc++)w.vals[colL(dc-1)]=null;
-        emptyWrites.push(w);
-      });
-      var dayWrites=emptyWrites.concat(res.writes);
-      ipBoxWrites(ws,dayWrites,plan.hours);        /* every shift of the new sheet is one box */
-      buf=await ipCreateSheetWrite(raw,name,todayName,dayWrites,res.ref,plan.keep);
+      buf=await ipCreateSheetWrite(raw,name,todayName,res.writes,res.ref,plan.keep);
       name=todayName;
     } else {
       buf=await ipSurgicalWrite(raw,name,res.writes,res.ref);
     }
+    ipRaw=new Uint8Array(buf);
+    ipBook=await new ExcelJS.Workbook().xlsx.load(ipRaw.buffer.slice(ipRaw.byteOffset,ipRaw.byteOffset+ipRaw.byteLength));
     if(ipHandle){
       var w=await ipHandle.createWritable();
       await w.write(buf); await w.close();
@@ -4643,18 +4724,32 @@ async function swVerifyBuf(buf,name,expect){
 async function swCloneDay(raw,book,src,newName,X){
   var swr=swingRows(registeredRows(hourData()),X);
   if(!swr.rows.length)return {res:{rows:0}};
-  var byKey={};
-  swr.rows.forEach(function(r){var k=String(r.v.B||'').trim();if(k)byKey[k]=r});
-  var sc=swScanSheet(src),date=dtxt(curISO(),'dmy'),writes=[],plan=[],keys=Object.keys(sc.map).filter(function(k){return /^B\d+$/i.test(k)}),used={};
+  var byKey={},firstShiftBag=0,lastShiftBag=0;
+  swr.rows.forEach(function(r){
+    var k=String(r.v.B||'').trim();
+    if(!k)return;
+    byKey[k]=r;
+    var bno=swBagNo(k,0);
+    if(bno){
+      if(!firstShiftBag||bno<firstShiftBag)firstShiftBag=bno;
+      if(bno>lastShiftBag)lastShiftBag=bno;
+    }
+  });
+  var sc=swScanSheet(src),date=dtxt(curISO(),'dmy'),writes=[],plan=[],used={};
+  var b1Row=sc.b1Row||3,hdrEnd=sc.hdrEnd||2;
+  var baseRef=sc.refRow>hdrEnd?sc.refRow:b1Row;
+  var keepRows={};
+  for(var hr=1;hr<=hdrEnd;hr++)keepRows[hr]=1;
   function conv(val){
     if(val===undefined||val===null||val==='')return null;
     if(typeof val==='number')return val;
     if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))return parseFloat(val);
     return String(val);
   }
-  keys.forEach(function(k){
-    var rn=sc.map[k],r=byKey[k],vals={C:date},red={},L;
-    ['D','E','F','G','H'].forEach(function(c){vals[c]=null});     /* the results of the old day go away */
+  for(var n=1;n<=SW_MAXBAG;n++){
+    var k='B'+n,rn=b1Row+n-1,r=byKey[k],vals={A:n,B:k,C:date},red={},bd={};
+    keepRows[rn]=1;
+    ['D','E','F','G','H','I','J','K'].forEach(function(c){vals[c]=null});
     if(r){
       used[k]=1;
       ['D','E','F','G','H','I','J','K'].forEach(function(c){
@@ -4663,20 +4758,24 @@ async function swCloneDay(raw,book,src,newName,X){
         if(r.red&&r.red[c])red[c]=1;
       });
       plan.push({key:k,rn:rn,r:r});
-    } else {
-      /* a bag of another shift: the factory text stays, only an old HOLD note goes */
-      [['I',9],['J',10]].forEach(function(q){
-        var old=swCellText(src.getCell(rn,q[1]).value);
-        if(/^\s*hold/i.test(old))vals[q[0]]='Good ';
-      });
     }
-    writes.push({row:rn,vals:vals,red:red,ref:rn});
-  });
+    var isTop=(n===1);
+    var isBot=(n===SW_MAXBAG);
+    for(var cn=2;cn<=11;cn++){
+      var spec={};
+      if(cn===2)spec.left='medium';
+      if(cn===11)spec.right='medium';
+      spec.top=isTop?'medium':'thin';
+      spec.bottom=isBot?'medium':'thin';
+      bd[colL(cn-1)]=spec;
+    }
+    writes.push({row:rn,vals:vals,red:red,ref:baseRef,bd:bd});
+  }
   var dropped=0;Object.keys(byKey).forEach(function(k){if(!used[k])dropped++});
-  if(!plan.length)throw new Error('the bags of this shift ('+swr.rows[0].v.B+'...) are not in the sheet "'+src.name+'" that was copied');
-  var buf=await ipCreateSheetWrite(raw,src.name,newName,writes,sc.refRow>2?sc.refRow:writes[0].row,null);
-  return {buf:buf,res:{rows:plan.length,keys:plan.map(function(p){return p.key}),from:plan[0].key,to:plan[plan.length-1].key,dropped:dropped,
-          bags:plan[0].key+'..'+plan[plan.length-1].key},expect:swExpect(plan)};
+  if(!plan.length)throw new Error('the bags of this shift ('+swr.rows[0].v.B+'...) could not be written into "'+newName+'"');
+  var buf=await ipCreateSheetWrite(raw,src.name,newName,writes,baseRef,keepRows);
+  return {buf:buf,res:{rows:plan.length,keys:plan.map(function(p){return p.key}),from:plan[0].key,to:'B'+SW_MAXBAG,dropped:dropped,
+          bags:plan[0].key+'..'+plan[plan.length-1].key+' (numbered up to B'+SW_MAXBAG+')'},expect:swExpect(plan)};
 }
 function swDefaultName(){
   var p=String(curISO()).split('-');
@@ -4888,49 +4987,64 @@ function swRowShift(row){
 /* what is already in the sheet: the numbering, the rows of this shift and the
    end of the block of the earlier shifts */
 function swScanSheet(ws){
-  var map={},last=2,firstBag=0,mine=[],prevEnd=0,prevBag=0,lastData=0,sampRef=0;
+  var hdrRow=1;
+  for(var hr=1;hr<=5;hr++){
+    var hb=swCellText(ws.getCell(hr,2).value).trim().toLowerCase();
+    if(hb==='no.'){hdrRow=hr;break}
+  }
+  var hdrEnd=hdrRow+1;
+  var map={},last=hdrEnd,firstBag=0,mine=[],prevEnd=0,prevBag=0,lastData=0,sampRef=0,cleanRef=0;
+  var lastMeasByShift={};
   ws.eachRow({includeEmpty:false},function(row,rn){
-    if(rn<=2)return;
-    var b=swCellText(row.getCell(2).value).trim();
-    if(b&&map[b]==null)map[b]=rn;
-    /* the last row that really holds the bags - the format of our rows comes
-       from a row like this, never from a stray row of the factory */
-    if(b&&/^B\d+$/i.test(b)){
-      lastData=rn;
-      if(!sampRef&&swRowFilled(row))sampRef=rn;
+    if(rn<=hdrEnd)return;
+    var sh=swRowShift(row);
+    if(swRowFilled(row)){
+      if(sh)lastMeasByShift[sh]=rn;
+      var faVal=num(swCellText(row.getCell(5).value));
+      var aVal=swCellText(row.getCell(1).value).trim();
+      if(rn>hdrEnd+1&&(faVal===null||faVal<=0.08)&&aVal!==''&&!cleanRef)cleanRef=rn;
+      if(!sampRef)sampRef=rn;
     }
-    if(b){var bn=swBagNo(b,0); if(bn&&(!firstBag||bn<firstBag))firstBag=bn;}
-    if(rn>last)last=rn;
-    /* the rows of this shift (they are written again in their own place when
-       the same shift is written twice - never a second copy) */
-    if(CUR&&swRowShift(row)===CUR){mine.push({rn:rn,key:b,no:swBagNo(b,0)});return}
-    /* the last row of the earlier shifts: the end of their block */
-    if(swRowFilled(row)){prevEnd=rn;prevBag=swBagNo(b,0)}
   });
-  /* the rows that already have a result of an earlier shift - they are never
-     used again (our rows go around them) */
+  if(cleanRef)sampRef=cleanRef;
   var busy={};
   ws.eachRow({includeEmpty:false},function(row,rn){
-    if(rn<=2)return;
-    if(swRowFilled(row)&&(!CUR||swRowShift(row)!==CUR))busy[rn]=1;
+    if(rn<=hdrEnd)return;
+    var b=swCellText(row.getCell(2).value).trim();
+    if(b&&map[b]==null)map[b]=rn;
+    if(b&&/^B\d+$/i.test(b))lastData=rn;
+    if(b){var bn=swBagNo(b,0); if(bn&&(!firstBag||bn<firstBag))firstBag=bn;}
+    if(rn>last)last=rn;
+    var sh=swRowShift(row),filled=swRowFilled(row);
+    var shActive=!!(sh&&lastMeasByShift[sh]&&rn<=lastMeasByShift[sh]+4);
+    if(CUR&&sh===CUR&&shActive){
+      mine.push({rn:rn,key:b||('B'+(rn-hdrEnd)),no:swBagNo(b,rn-hdrEnd+2)});
+      return;
+    }
+    if(filled||shActive){
+      prevEnd=rn;
+      prevBag=swBagNo(b,rn-hdrEnd+2);
+      busy[rn]=1;
+    }
   });
-  return {map:map,last:last,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag,busy:busy,
-          lastData:lastData,refRow:(sampRef>2?sampRef:(lastData>2?lastData:(last>2?last:3)))};
+  var b1Row=map['B1']||(hdrEnd+1);
+  var firstEmptyRow=mine.length?mine[0].rn:(prevEnd>hdrEnd?(prevEnd+1):b1Row);
+  var firstEmptyBag=mine.length?(mine[0].no||(firstEmptyRow-b1Row+1)):(prevEnd>hdrEnd?(prevBag>0?(prevBag+1):(firstEmptyRow-b1Row+1)):1);
+  return {map:map,last:last,hdrRow:hdrRow,hdrEnd:hdrEnd,b1Row:b1Row,firstBag:firstBag,mine:mine,prevEnd:prevEnd,prevBag:prevBag,busy:busy,
+          firstEmptyRow:firstEmptyRow,firstEmptyBag:firstEmptyBag,
+          lastData:lastData,refRow:(sampRef>hdrEnd?sampRef:(lastData>hdrEnd?lastData:(last>hdrEnd?last:b1Row)))};
 }
 function swWriteRows(ws,X){
   var reg=registeredRows(hourData());
-  var sw=swingRows(reg,X);
   var sc=swScanSheet(ws);
-  var map=sc.map,last=sc.last,firstBag=sc.firstBag;
-  /* the day is written up to B200. The rows that have no result yet keep only
-     the numbering, the bag and the date - the shift that has the results
-     fills its own rows. A sheet that does not exist yet starts at the first
-     bag of the shift that creates it: A -> B1 (the whole day), B -> B61. */
-  if(!firstBag)firstBag=swBounds(CUR).st;
-  for(var n=firstBag;n<=SW_MAXBAG;n++){
-    var bkey='B'+n;
+  var sw=swingRows(reg,X);
+  var map=sc.map,last=sc.last,firstBag=1;
+  /* always ensure all rows B1..B200 exist with numbering, bag key, and today's date */
+  for(var n=1;n<=SW_MAXBAG;n++){
+    var bkey='B'+n,brn=2+n;
     if(map[bkey]==null){
-      var brn=last+1; map[bkey]=brn; last=brn;
+      map[bkey]=brn;
+      if(brn>last)last=brn;
       swBlankRow(ws,brn,bkey);
     }
   }
@@ -4938,15 +5052,6 @@ function swWriteRows(ws,X){
   var plan=pl.plan,dropped=pl.dropped;
   if(!plan.length)return {rows:0,keys:[],dropped:dropped};
   var firstRow=plan[0].rn, lastRow=plan[plan.length-1].rn;
-  /* the row above the block is only a separator now -> thin */
-  if(firstRow>3){
-    for(var cc2=2;cc2<=11;cc2++){
-      var up=ws.getCell(firstRow-1,cc2);
-      var ub=Object.assign({},up.border||{});
-      ub.bottom={style:'thin',color:{argb:'FF000000'}};
-      up.border=ub;
-    }
-  }
   plan.forEach(function(p){
     var rn=p.rn, r=p.r;
     var row=ws.getRow(rn); row.height=14.25;          /* always the height of the app */
@@ -4972,93 +5077,100 @@ function swWriteRows(ws,X){
       cell.fill={type:'pattern',pattern:'none'};   /* never a broken colour */
     });
   });
-  /* the border of the whole block: thick (medium) on the outside, thin inside */
+  /* the border of the whole block: thick (medium) on the outside and shift boundary, thin inside */
   var bFirst=3, bLast=Math.max(2+SW_MAXBAG,lastRow);
   for(var br=bFirst;br<=bLast;br++){
+    var isTop=(br===bFirst);
+    var isBot=(br===bLast);
     for(var bi=0;bi<SCOLS.length;bi++){
-      ws.getCell(br,bi+2).border=swBorderOf(br===bFirst,br===bLast,bi===0,bi===SCOLS.length-1);
+      ws.getCell(br,bi+2).border=swBorderOf(isTop,isBot,bi===0,bi===SCOLS.length-1);
     }
   }
   return {rows:plan.length,keys:plan.map(function(p){return p.key}),
           from:firstBag,to:SW_MAXBAG,dropped:dropped,
           bags:plan[0].key+'..'+plan[plan.length-1].key};
 }
-/* where do the rows of this shift go? The sheet of the day tells us:
-   - this shift is already in the sheet: the same rows again (never a copy)
-   - the earlier shifts are in the sheet: the rows of this shift start right
-     after the last row that has a result, the bag numbers carry on
-   - the sheet has no result yet: the rows keep their own place */
+/* where do the rows of this shift go?
+   Every row is placed at the exact row of its bag number (B1 -> row 3, B61 -> row 63,
+   B65 -> row 67, etc.):
+   - If the previous shift ended at B61 and this shift starts at B65, B65 is placed
+     at B65's row (leaving B62, B63, B64 empty in the sheet).
+   - If the empty rows after Shift A in an older sheet did not have B-keys in sc.map yet,
+     the row for bag B{bno} is computed directly from the bag number (sc.prevEnd + (bno - sc.prevBag)
+     or 2 + bno), NEVER jumping to sc.last + 1 after the empty table. */
 function swMakePlan(sc,rows){
-  var br=swBounds(CUR),plan=[],dropped=0;
-  if(sc.mine.length){
-    /* this shift is already in the sheet: the same rows, in their own place.
-       The bag of the factory is kept - we only fill the empty cells. */
-    var lastMine=sc.mine[sc.mine.length-1];
-    rows.forEach(function(r,i){
-      var rn,key,k0=String(r.v.B||'').trim();
-      if(k0&&sc.map[k0]!=null){plan.push({key:k0,rn:sc.map[k0],r:r});return}      /* the row of that bag */
-      if(i<sc.mine.length){rn=sc.mine[i].rn;key=sc.mine[i].key||('B'+(lastMine.no+i-sc.mine.length+1))}
-      else{rn=lastMine.rn+1+(i-sc.mine.length);key=String(r.v.B||'').trim()||('B'+(lastMine.no+1+(i-sc.mine.length)))}
-      plan.push({key:key,rn:rn,r:r});
-    });
-  }else if(sc.prevEnd>0){
-    /* the earlier shifts are in the sheet: the rows of this shift come after
-       them. The bag of every row is the bag of the reading - the numbers of
-       the day are absolute, not counted. A bag that already has an empty row
-       in the sheet goes into that row, the others go after the last row. */
-    var taken={},nextRow=Math.max(sc.last,sc.prevEnd)+1;
-    rows.forEach(function(r,i){
-      var key=String(r.v.B||'').trim();
-      if(!key)return;
-      var bno=swBagNo(key,0);
-      if(bno>SW_MAXBAG){dropped++;return}        /* the day ends at B200 */
-      var rn=sc.map[key];
-      if(rn!=null&&!taken[rn]&&!sc.busy[rn])rn=rn;   /* the empty row of the factory */
-      else rn=nextRow++;
-      taken[rn]=1;
-      plan.push({key:key,rn:rn,r:r});
-    });
-  }else{
-    /* the sheet has no result yet: the rows keep their own place */
-    rows.forEach(function(r,i){
-      var key=String(r.v.B||'').trim();
-      if(!key)return;
-      var rn=sc.map[key];
-      if(rn==null){rn=3+i;sc.map[key]=rn}
-      plan.push({key:key,rn:rn,r:r});
-    });
-  }
+  var plan=[],dropped=0,taken={},b1Row=sc.b1Row||3,hdrEnd=sc.hdrEnd||2;
+  rows.forEach(function(r,i){
+    var rawKey=String(r.v.B||'').trim();
+    var bno=swBagNo(rawKey,0);
+    if(!bno)bno=(sc.firstEmptyBag||1)+i;
+    if(bno>SW_MAXBAG){dropped++;return}
+    var key='B'+bno;
+    var rn=sc.map[key];
+    if(rn==null){
+      if(sc.prevEnd>hdrEnd&&sc.prevBag>0&&bno>sc.prevBag)rn=sc.prevEnd+(bno-sc.prevBag);
+      else rn=b1Row+bno-1;
+    }
+    if(taken[rn])rn=b1Row+bno-1;
+    taken[rn]=1;
+    plan.push({key:key,rn:rn,r:r});
+  });
   return {plan:plan,dropped:dropped};
 }
-/* the rows of this shift as they go into the file: only our own rows, with
-   the border of our block (thick on the outside, thin inside) - the rows of
-   the earlier shifts are not touched at all */
+/* the rows of this shift as they go into the file: our shift's rows starting at
+   the first empty row, plus ensuring any missing numbered/dated rows up to B200
+   are present with the exact format of the sheet */
 function swPlanWrites(sc,plan){
-  var writes=[],base=(sc.refRow>2?sc.refRow:(sc.last>2?sc.last:3)),n=plan.length;
+  var b1Row=sc.b1Row||3,hdrEnd=sc.hdrEnd||2,endRn=b1Row+SW_MAXBAG-1;
+  var writes=[],base=(sc.refRow>hdrEnd?sc.refRow:(sc.last>hdrEnd?sc.last:b1Row)),n=plan.length,writtenRows={};
+  var date=dtxt(curISO(),'dmy');
   plan.forEach(function(p,i){
     var vals={},red={},bd={};
+    writtenRows[p.rn]=1;
     SCOLS.forEach(function(c){
       var val=p.r.v[c.k];
       if(c.k==='B')val=p.key;
-      if(c.k==='C')val=dtxt(curISO(),'dmy');
+      if(c.k==='C')val=date;
       if(val===undefined||val===null||val==='')vals[c.k]=null;
       else if(typeof val==='number')vals[c.k]=val;
       else if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))vals[c.k]=parseFloat(val);
       else vals[c.k]=String(val);
       if(p.r.red&&p.r.red[c.k])red[c.k]=1;
     });
-    vals.A=swBagNo(p.key,p.rn);                /* the numbering on the left */
-    /* the border of our block: the outside is thick, the inside is thin */
+    vals.A=swBagNo(p.key,p.rn-b1Row+3);        /* sequential 1, 2, 3... side numbering */
+    /* the border of the table: thick only on outer edges (top of B1, bottom of B200, left of B, right of K), thin everywhere inside */
     for(var cn=2;cn<=11;cn++){
       var spec={};
       if(cn===2)spec.left='medium';
       if(cn===11)spec.right='medium';
-      spec.top=(i===0)?'medium':'thin';
-      spec.bottom=(i===n-1)?'medium':'thin';
+      spec.top=(p.rn===b1Row)?'medium':'thin';
+      spec.bottom=(p.rn===endRn)?'medium':'thin';
       bd[colL(cn-1)]=spec;
     }
     writes.push({row:p.rn,vals:vals,red:red,ref:base,bd:bd});
   });
+  /* ensure all unwritten rows (including any skipped bags like B62..B64 before B65, and all rows up to B200)
+     have sequential side numbering 1..200, bag key B1..B200, date, empty D..K, and clean borders */
+  for(var bno=1;bno<=SW_MAXBAG;bno++){
+    var bkey='B'+bno;
+    var rn2=sc.map[bkey]||((sc.prevEnd>hdrEnd&&sc.prevBag>0&&bno>sc.prevBag)?(sc.prevEnd+(bno-sc.prevBag)):(b1Row+bno-1));
+    if(writtenRows[rn2])continue;
+    if(sc.busy[rn2]){
+      /* still fix any broken/missing side numbering in col A on existing rows */
+      writes.push({row:rn2,vals:{A:bno},red:{},ref:base});
+      continue;
+    }
+    var vals2={A:bno,B:bkey,C:date,D:null,E:null,F:null,G:null,H:null,I:null,J:null,K:null},bd2={};
+    for(var cn2=2;cn2<=11;cn2++){
+      var sp2={};
+      if(cn2===2)sp2.left='medium';
+      if(cn2===11)sp2.right='medium';
+      sp2.top=(rn2===b1Row)?'medium':'thin';
+      sp2.bottom=(rn2===endRn)?'medium':'thin';
+      bd2[colL(cn2-1)]=sp2;
+    }
+    writes.push({row:rn2,vals:vals2,red:{},ref:base,bd:bd2});
+  }
   return writes;
 }
 function swFillSelect(){
@@ -5085,11 +5197,14 @@ function swPlan(){
   var br=swBounds(CUR);
   var blocked=false;
   /* where do the rows of this shift go? the sheet of the day tells us */
-  var where='the bags B'+br.st+'→B'+br.en,wsNow=t;
-  if(wsNow){
-    var sc=swScanSheet(wsNow);
-    if(sc.mine.length)where='the rows of shift '+CUR+' again (the same rows)';
-    else if(sc.prevEnd>0)where='right after the last row with a result (B'+(sc.prevBag+1)+'→B'+(sc.prevBag+br.tons)+')';
+  var where='the bags B'+br.st+'→B'+br.en+' (numbered up to B'+SW_MAXBAG+')',wsNow=t;
+  if(wsNow&&!makeNew){
+    var sc=swScanSheet(wsNow),Xnow=xs();
+    var hasManualFrom=(Xnow.swFrom!==undefined&&Xnow.swFrom!==''&&+Xnow.swFrom>=1);
+    var stB=(CUR==='A')?br.st:(hasManualFrom?br.st:Math.max(br.st,sc.firstEmptyBag||1));
+    var enB=Math.min(SW_MAXBAG,stB+br.tons-1);
+    if(sc.mine.length&&!hasManualFrom)where='the rows of shift '+CUR+' again (B'+stB+'→B'+enB+')';
+    else if(sc.prevEnd>0)where='at B'+stB+'→B'+enB+(stB>sc.prevBag+1?' (leaving B'+(sc.prevBag+1)+'..B'+(stB-1)+' empty)':' (right after B'+sc.prevBag+')');
   }
   el.innerHTML='<b>📥 '+br.tons+' row(s) → '+nm.replace(/</g,'&lt;')+'</b> · '+
     (blocked?'⚠ the sheet of this day is created in shift A':(makeNew?'a new sheet':'the sheet of that day'))+
@@ -5267,7 +5382,10 @@ async function swWrite(){
       /* the sheet of the factory: only the rows of THIS shift go into the file -
          the rows of the earlier shifts keep their values and their format */
       var sc2=swScanSheet(ws);
-      var swr2=swingRows(registeredRows(hourData()),X);
+      var br2=swBounds(CUR);
+      var hasManualFrom2=(X.swFrom!==undefined&&X.swFrom!==''&&+X.swFrom>=1);
+      var startBag2=(CUR==='A')?br2.st:(hasManualFrom2?br2.st:Math.max(br2.st,sc2.firstEmptyBag||1));
+      var swr2=swingRows(registeredRows(hourData()),X,startBag2);
       var pl2=swMakePlan(sc2,swr2.rows);
       if(!pl2.plan.length){swStatus('Nothing to write in this shift.',true);return}
       var wr=swPlanWrites(sc2,pl2.plan);
@@ -5279,6 +5397,8 @@ async function swWrite(){
       var chk2=await swVerifyBuf(buf,name,swExpect(pl2.plan));
       if(!chk2.ok)throw new Error(chk2.msg);
     }
+    swRaw=new Uint8Array(buf);
+    swBook=await swReadBook(swRaw);
     if(swHandle){
       var w=await swHandle.createWritable();
       await w.write(buf); await w.close();
