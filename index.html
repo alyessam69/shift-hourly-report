@@ -2858,7 +2858,11 @@ function xlBuildScratchZip(ws){
   }
   function xfId(cell){
     var fi=fontId(cell.font),li=fillId(cell.fill),bi=borderId(cell.border),al=cell.alignment||{};
-    var hz=al.horizontal||'center',vt=al.vertical||'middle',wr=al.wrapText?1:0;
+    /* ExcelJS calls the middle alignment "middle" - in the file of Excel the
+       valid word is "center" (with "middle" the file can not be read again) */
+    var hz=al.horizontal||'center',vt=al.vertical||'center',wr=al.wrapText?1:0;
+    if(vt==='middle'||vt==='centre')vt='center';
+    if(['top','center','bottom','distributed','justify'].indexOf(vt)<0)vt='center';
     var k=[fi,li,bi,hz,vt,wr].join('|');
     if(xk[k]===undefined){xk[k]=xfs.length;xfs.push('<xf numFmtId="0" fontId="'+fi+'" fillId="'+li+'" borderId="'+bi+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="'+hz+'" vertical="'+vt+'"'+(wr?' wrapText="1"':'')+'/></xf>')}
     return xk[k];
