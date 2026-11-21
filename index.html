@@ -2471,11 +2471,9 @@ function openOutlookApp(){
   try{window.location.href='intent://emails/inbox#Intent;scheme=ms-outlook;package=com.microsoft.office.outlook;end'}catch(e){}
   return;
  }
- /* PC / desktop browser: open the default mail client. ms-outlook: is the
-    protocol Outlook registers on Windows/macOS; mailto: is the universal
-    fallback (opens a new message in the default mail app). */
- try{window.location.href='ms-outlook:'}catch(e){}
- setTimeout(function(){try{window.location.href='mailto:'}catch(e){}},800);
+ /* Desktop: one best-effort Outlook protocol attempt, never a second compose window. */
+    toast('Copied. If Outlook does not open, open it manually and paste.');
+    try{window.location.href='ms-outlook:'}catch(e){}
 }
 async function copyVisibleCardAndOpenOutlook(){
  var card=visibleHourCard();
