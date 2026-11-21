@@ -5546,8 +5546,11 @@ else start();
 (function(){
   function currentHour(){
     var h=new Date().getHours();
-    /* 00:00 is the first hour of shift C (01:00) */
-    return (h===0)?1:h;
+/* every clock hour lands on a shift: transition hours join the upcoming shift */
+     if(h===0) return 1;
+     if(h===8) return 9;
+     if(h===16) return 17;
+     return h;
   }
   /* the shift that covers this hour (A 09-15, B 17-23, C 01-07) */
   function shiftOfHour(h){
