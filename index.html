@@ -2460,6 +2460,7 @@ function olHourRefresh(){
  window.addEventListener('resize',olHourRefresh);
  setTimeout(olHourRefresh,400);
 })();
+   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){if(window.ShrBridge||/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))return;b.style.display='none';if(h)h.style.display='none';}apply();window.addEventListener('load',apply);})();
 function openOutlookApp(){
  if(window.ShrBridge){
   /* APK: native launch, works despite the WebView's blocked external links */
