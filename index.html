@@ -1450,22 +1450,22 @@ function fitHeader(text,fontPx,maxW,minPx){
 function tbl(title,bg,sp,heads,vals){
  var cols=sp.cols,W=0;cols.forEach(function(c){W+=c});var n=cols.length;
  var f='font-family:Times New Roman,serif;font-weight:bold;text-align:center;vertical-align:middle;line-height:1.1;';
- var h='<table cellspacing="0" cellpadding="0" border="0" width="'+W+'" style="border-collapse:collapse;table-layout:fixed;width:'+W+'px;margin:0 0 24px 0"><tr><td colspan="'+n+'" height="'+sp.th+'" bgcolor="'+bg+'" align="center" style="'+BD+'background-color:'+bg+';color:#ffffff;'+f+'font-size:'+sp.tf+'px;height:'+sp.th+'px;padding:0 2px"><font color="#ffffff">'+title+'</font></td></tr><tr>';
- heads.forEach(function(x,i){h+='<td width="'+cols[i]+'" height="'+sp.hh+'" bgcolor="'+bg+'" align="center" style="'+BD+'width:'+cols[i]+'px;height:'+sp.hh+'px;background-color:'+bg+';color:#ffffff;'+f+'font-size:'+fitHeader(x,sp.hf,cols[i]-10,11)+'px;white-space:'+(sp.wrap?'normal':'nowrap')+';padding:0 2px"><font color="#ffffff">'+x+'</font></td>'});
+ var h='<table cellspacing="0" cellpadding="0" border="0" width="'+W+'" style="border-collapse:collapse;table-layout:fixed;width:'+W+'px;margin:0 0 24px 0"><tr><td colspan="'+n+'" height="'+sp.th+'" bgcolor="'+bg+'" align="center" style="'+BD+'background-color:'+bg+';color:#000000;'+f+'font-size:'+sp.tf+'px;height:'+sp.th+'px;padding:0 2px"><font color="#000000">'+title+'</font></td></tr><tr>';
+ heads.forEach(function(x,i){h+='<td width="'+cols[i]+'" height="'+sp.hh+'" bgcolor="'+bg+'" align="center" style="'+BD+'width:'+cols[i]+'px;height:'+sp.hh+'px;background-color:'+bg+';color:#000000;'+f+'font-size:'+fitHeader(x,sp.hf,cols[i]-10,11)+'px;white-space:'+(sp.wrap?'normal':'nowrap')+';padding:0 2px"><font color="#000000">'+x+'</font></td>'});
  h+='</tr><tr>';
- vals.forEach(function(v,i){h+='<td contenteditable="true" width="'+cols[i]+'" height="'+sp.vh+'" bgcolor="#111111" align="center" style="'+BD+'width:'+cols[i]+'px;height:'+sp.vh+'px;background-color:#111111;color:#ffffff;'+f+'font-size:'+sp.vf+'px;white-space:nowrap;padding:0 2px">'+(v||'&nbsp;')+'</td>'});
+ vals.forEach(function(v,i){h+='<td contenteditable="true" width="'+cols[i]+'" height="'+sp.vh+'" bgcolor="#ffffff" align="center" style="'+BD+'width:'+cols[i]+'px;height:'+sp.vh+'px;background-color:#ffffff;color:#000000;'+f+'font-size:'+sp.vf+'px;white-space:nowrap;padding:0 2px">'+(v||'&nbsp;')+'</td>'});
  return h+'</tr></table>';
 }
 var SP1={cols:[118,88,74],tf:16,th:27,hf:15,hh:28,vf:24,vh:44};
 var SP2={cols:[118,88,74,80,118],tf:18,th:34,hf:19,hh:62,vf:19,vh:35,wrap:1};
 var SP3={cols:[80,80,100,88],tf:18,th:32,hf:20,hh:32,vf:17,vh:43};
-function t1(){return tbl('Reactor','#006400',SP1,['Mois%','FFA%','FA%'],['','N/A',''])}
-function t2(){return tbl('Plodder','#574967',SP2,['Moisture %','FFA%','FA%','Y+5R','Capacity'],['','N/A','','',''])}
+function t1(){return tbl('Reactor','#BFA340',SP1,['Mois%','FFA%','FA%'],['','N/A',''])}
+function t2(){return tbl('Plodder','#A6A6A6',SP2,['Moisture %','FFA%','FA%','Y+5R','Capacity'],['','N/A','','',''])}
 var COLDEF='0.2 R / 1.1Y';
 function shf(){var o=xs().sh||{};function i(f,l,ph,dv){var v=(o[f]!==undefined&&o[f]!==null&&o[f]!=='')?o[f]:(dv||'');return '<label>'+l+'<br><input data-f="'+f+'" inputmode="decimal" placeholder="'+ph+'" value="'+esc(v)+'"></label>'}
  return '<div class="shf nocopy">Shift analyses \u2013 type once, used for both samples (not copied)<div class="row">'+i('iv','IV','42.2')+i('ti','Titre','45.5')+i('col','Color',COLDEF,COLDEF)+'</div></div>'}
 function t3c(card,time){return shf()+t3(time)}
-function t3(time){return tbl('Plodder (<span class="t3ed" contenteditable="true" spellcheck="false" title="Tap to change the hour of this Plodder analysis">'+time+'</span>)','#2d4f70',SP3,['CL %','Gly%','EDTA%','TFM'],['','','',''])}
+function t3(time){return tbl('Plodder (<span class="t3ed" contenteditable="true" spellcheck="false" title="Tap to change the hour of this Plodder analysis">'+time+'</span>)','#9DC3E6',SP3,['CL %','Gly%','EDTA%','TFM'],['','','',''])}
 function cellTxt(x){return x.textContent.replace(/\u00a0/g,'').trim()}
 function load(){
  try{
