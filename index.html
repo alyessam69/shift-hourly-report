@@ -1822,7 +1822,7 @@ function swingRows(data,X,overrideStartBag){
  }
  var rows=[],sampFA={};
  for(var n2=st;n2<=en;n2++){
-  var v={B:'B'+n2,C:dtxt(curISO(),X.fmt),D:'',E:'',F:'',G:'',H:'',I:'Good ',J:'Good ',K:CUR},auto={D:1,E:1,F:1,G:1,H:1,I:1,J:1};
+  var v={B:'B'+n2,C:dtxt(swISO(),X.fmt),D:'',E:'',F:'',G:'',H:'',I:'Good ',J:'Good ',K:CUR},auto={D:1,E:1,F:1,G:1,H:1,I:1,J:1};
   var hI=bagToHr[n2];
   if(hI!==undefined&&active[hI]&&bagMois[n2]!==undefined){
    var d2=active[hI];
@@ -1998,7 +1998,9 @@ function isoFromDMY(s){var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||''
 var XDATE='';
 function curISO(){return XDATE||todayISO()}
 function curDMY(){return dmY(curISO())}
-function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child,#tS table.swdata tr>td[data-k="C"]');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
+/* Swing sheet date: the actual day, except Shift C whose Swing results carry the day before (Aly, 2026-11-27) */
+function swISO(){var i=curISO();if(CUR!=='C')return i;var p=i.split('-'),d=new Date(+p[0],+p[1]-1,+p[2]-1);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}var sw=dtxt(swISO(),'dmy'),cs2=document.querySelectorAll('#tS table.swdata tr>td[data-k="C"]');for(var j=0;j<cs2.length;j++){var t2=(cs2[j].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t2))cs2[j].textContent=sw}}
 var _day=todayISO();setInterval(function(){var d=todayISO();if(d!==_day){_day=d;refreshDates()}},30000);
 function dtxt(iso,fmt){var p=(iso||curISO()).split('-');return fmt==='mdy'?p[1]+'/'+p[2]+'/'+p[0]:p[2]+'/'+p[1]+'/'+p[0]}
 function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,sh:(c._ps!==false),a:a,c:c})});return out}
@@ -2248,7 +2250,7 @@ function shiftHourDataFromStore(shKey){
 }
 function extractSwingSheet(name){
  var tb=document.querySelector('#tS table.swdata');if(!tb)return null;
- var X=xs(),iso=curISO(),dateStr=dtxt(iso,X.fmt);
+ var X=xs(),iso=swISO(),dateStr=dtxt(iso,X.fmt);
  var widths=SCOLS.map(function(c){return Math.round((c.w-5)/7*10)/10});
  var byBag={},domBags=[];
  /* Read ONLY the current shift's rows from the #tS table (including any live edits) */
@@ -4828,7 +4830,7 @@ async function swCloneDay(raw,book,src,newName,X){
       if(bno>lastShiftBag)lastShiftBag=bno;
     }
   });
-  var sc=swScanSheet(src),date=dtxt(curISO(),'dmy'),writes=[],plan=[],used={};
+  var sc=swScanSheet(src),date=dtxt(swISO(),'dmy'),writes=[],plan=[],used={};
   var b1Row=sc.b1Row||3,hdrEnd=sc.hdrEnd||2;
   var baseRef=sc.refRow>hdrEnd?sc.refRow:b1Row;
   var keepRows={};
@@ -5024,7 +5026,7 @@ function swBlankRow(ws,rn,key){
   SCOLS.forEach(function(c,i){
     var cell=ws.getCell(rn,i+2);
     if(c.k==='B')cell.value=key;
-    else if(c.k==='C')cell.value=dtxt(curISO(),'dmy');
+    else if(c.k==='C')cell.value=dtxt(swISO(),'dmy');
     else cell.value=null;
     cell.font={name:'Arial',size:10,bold:true,color:{argb:'FF000000'}};
     cell.alignment={horizontal:'center',vertical:'middle'};
@@ -5159,7 +5161,7 @@ function swWriteRows(ws,X){
       var cell=ws.getCell(rn,i+2);
       var val=r.v[c.k];
       if(c.k==='B')val=p.key;                 /* the bag of the row follows the sheet */
-      if(c.k==='C')val=dtxt(curISO(),'dmy');
+      if(c.k==='C')val=dtxt(swISO(),'dmy');
       if(val===undefined||val===null||val==='')cell.value=null;
       else if(typeof val==='number')cell.value=val;
       else if(/^-?\d+(\.\d+)?$/.test(String(val).trim()))cell.value=parseFloat(val);
@@ -5216,7 +5218,7 @@ function swMakePlan(sc,rows){
 function swPlanWrites(sc,plan){
   var b1Row=sc.b1Row||3,hdrEnd=sc.hdrEnd||2,endRn=b1Row+SW_MAXBAG-1;
   var writes=[],base=(sc.refRow>hdrEnd?sc.refRow:(sc.last>hdrEnd?sc.last:b1Row)),n=plan.length,writtenRows={};
-  var date=dtxt(curISO(),'dmy');
+  var date=dtxt(swISO(),'dmy');
   plan.forEach(function(p,i){
     var vals={},red={},bd={};
     writtenRows[p.rn]=1;
