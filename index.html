@@ -1493,7 +1493,7 @@ function saveAll(){
   [].forEach.call(document.querySelectorAll('.card'),function(c){
    var ck=c.querySelector('.ck');if(!ck)return;
    var v=[];[].forEach.call(c.querySelectorAll('.blk td[contenteditable]'),function(x){v.push(cellTxt(x))});
-   o[c._h]={ck:ck.checked,t3:c._t3||'',t3m:c._t3man||'',v:v,tm:c._tm?1:0};
+   o[c._h]={ck:ck.checked,t3:c._t3||'',t3m:c._t3man||'',v:v,tm:c._tm?1:0,ps:(c._ps===false)?0:1};
   });
   all[CUR]=o;sset(KEY,JSON.stringify(all));
   setStatus();
@@ -1513,14 +1513,19 @@ function build(key){
  hrs.forEach(function(h,i){
   var samp=(i===0||i===3),sv=saved[h];
   var card=document.createElement('div');card.className='card';card._h=h;card._samp=samp;card._time=pad(h);
-  card.innerHTML='<div class="bar"><b>'+pad(h)+'</b><label><input type="checkbox" class="ck"> '+(samp?'Plodder table':'Add last Plodder table')+'</label><select class="sz" title="Size of the copied tables"><option value="std">Standard</option><option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option></select><button class="cp">Copy</button></div>'
+  card.innerHTML='<div class="bar"><b>'+pad(h)+'</b><label><input type="checkbox" class="ck"> '+(samp?'Plodder table':'Add last Plodder table')+'</label><label class="psl" title="Send this hour\'s extra analyses (CL, Gly, EDTA, TFM, IV, Titre, Color) to the Plodder sheet">Plodder sheet <select class="ps"><option value="1">Yes</option><option value="0">No</option></select></label><select class="sz" title="Size of the copied tables"><option value="std">Standard</option><option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option></select><button class="cp">Copy</button></div>'
    +'<div class="scroll"><div class="blk" style="padding:4px;font-family:Times New Roman,serif;width:460px"><div style="color:#4472c4;font-weight:bold;font-size:19px;font-family:Times New Roman,serif;margin:0 0 14px 0">'+pad(h)+'</div>'+t1()+t2()+'<div class="slot"></div></div></div><div class="hint calc"></div>';
   m.appendChild(card);
   var slot=card.querySelector('.slot'),ck=card.querySelector('.ck');
   var on=sv?sv.ck:samp;
   if(on){ck.checked=true;card._t3=(sv&&sv.t3)||pad(h);card._t3man=(sv&&sv.t3m)||'';slot.innerHTML=t3c(card,card._t3)}
   if(sv){fillCells(card,sv.v);card._tm=!!sv.tm}
+  card._ps=!(sv&&sv.ps===0);
+  var psSel=card.querySelector('.ps'),psLbl=card.querySelector('.psl');
+  psSel.value=card._ps?'1':'0';psLbl.style.display=ck.checked?'':'none';
+  psSel.onchange=function(){card._ps=(psSel.value==='1');saveAll();renderSummary()};
   ck.onchange=function(){
+   psLbl.style.display=ck.checked?'':'none';
    if(!ck.checked){slot.innerHTML='';card._t3='';saveAll();return}
    var src=null;
    if(!samp){var cards=[].slice.call(document.querySelectorAll('.card'));
@@ -1997,7 +2002,7 @@ function curDMY(){return dmY(curISO())}
 function refreshDates(){var dm=curDMY();var sd=document.getElementById('sd');if(sd&&sd.dataset.touched!=='1')sd.value=dm;var cs=document.querySelectorAll('#tR tr>td:first-child,#tP tr>td:first-child,#tS table.swdata tr>td[data-k="C"]');for(var i=0;i<cs.length;i++){var t=(cs[i].textContent||'').trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(t))cs[i].textContent=dm}}
 var _day=todayISO();setInterval(function(){var d=todayISO();if(d!==_day){_day=d;refreshDates()}},30000);
 function dtxt(iso,fmt){var p=(iso||curISO()).split('-');return fmt==='mdy'?p[1]+'/'+p[2]+'/'+p[0]:p[2]+'/'+p[1]+'/'+p[0]}
-function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,a:a,c:c})});return out}
+function hourData(){var out=[];[].forEach.call(document.querySelectorAll('.card'),function(c){if(c._h==null)return;var a=[].map.call(c.querySelectorAll('.blk td[contenteditable]'),cellTxt);var own=!!(c.querySelector('.ck').checked&&a.length>=12);out.push({h:c._h,own:own,sh:(c._ps!==false),a:a,c:c})});return out}
 function num(v){var n=parseFloat(v);return isNaN(n)?null:n}
 function vals(kind,d,X){
  var ex=(X.ex&&X.ex[d.h]&&X.ex[d.h][kind])||{};
@@ -2011,15 +2016,17 @@ function vals(kind,d,X){
  }else{
   v.D='Plodder';v.F=d.a[3];v.G=(d.a[4]==='N/A'?'':d.a[4]);v.H=d.a[5];
   if(num(v.H)!==null&&num(v.H)>0.08)red.H=1;
-  v.I=d.own?d.a[8]:'';v.J=d.own?d.a[9]:'';v.K=d.own?d.a[10]:'';v.M=d.own?d.a[11]:'';
+  var psOn=d.own&&d.sh!==false; /* Plodder sheet Yes/No: No keeps the hour row but the extra analyses go N/A */
+  v.I=psOn?d.a[8]:'';v.J=psOn?d.a[9]:'';v.K=psOn?d.a[10]:'';v.M=psOn?d.a[11]:'';
   v.E=g('E','No rancid odor');v.L=g('L','N/A');v.Q=g('Q','Present');v.R=g('R','');
-  var rv=d.own?rnd(X,d.h):null;
-  function ga(k,val){var e=ex[k];if(d.own&&(e===undefined||e===''||e==='N/A'||(k==='P'&&e===COLDEF))){auto[k]=1;return val}if(!d.own&&(e===undefined||e===''||e==='N/A')){auto[k]=1;return ''}return e!==undefined?e:''}
+  var rv=psOn?rnd(X,d.h):null;
+  function ga(k,val){var e=ex[k];if(d.own&&!psOn){auto[k]=1;return 'N/A'}if(d.own&&(e===undefined||e===''||e==='N/A'||(k==='P'&&e===COLDEF))){auto[k]=1;return val}if(!d.own&&(e===undefined||e===''||e==='N/A')){auto[k]=1;return ''}return e!==undefined?e:''}
   v.N=ga('N',rv&&rv.iv);v.O=ga('O',rv&&rv.ti);v.P=ga('P',rv&&rv.col);
   PL_EX.forEach(function(k){ed[k]=1});
   ['F','G','H','I','J','K','L','M','N','O','P'].forEach(function(k){
    if(v[k]===''&&(ex[k]===undefined||ex[k]==='')){v[k]='N/A';auto[k]=1}
   });
+  if(d.own&&!psOn){['I','J','K','M'].forEach(function(k){v[k]='N/A';auto[k]=1})}
  }
  return{v:v,red:red,ed:ed,auto:auto};
 }
@@ -2236,7 +2243,7 @@ function shiftHourDataFromStore(shKey){
  hrs.forEach(function(h,i){
   var sv=all[h];if(!sv||!sv.v)return;
   var samp=(i===0||i===3),on=(sv.ck!==undefined)?!!sv.ck:samp;
-  out.push({h:h,own:!!(on&&sv.v.length>=12),a:sv.v});
+  out.push({h:h,own:!!(on&&sv.v.length>=12),sh:(sv.ps!==0),a:sv.v});
  });
  return registeredRows(out);
 }
