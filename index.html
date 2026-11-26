@@ -1522,10 +1522,9 @@ function build(key){
   if(sv){fillCells(card,sv.v);card._tm=!!sv.tm}
   card._ps=!(sv&&sv.ps===0);
   var psSel=card.querySelector('.ps'),psLbl=card.querySelector('.psl');
-  psSel.value=card._ps?'1':'0';psLbl.style.display=ck.checked?'':'none';
+  psSel.value=card._ps?'1':'0';
   psSel.onchange=function(){card._ps=(psSel.value==='1');saveAll();renderSummary()};
   ck.onchange=function(){
-   psLbl.style.display=ck.checked?'':'none';
    if(!ck.checked){slot.innerHTML='';card._t3='';saveAll();return}
    var src=null;
    if(!samp){var cards=[].slice.call(document.querySelectorAll('.card'));
