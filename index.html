@@ -2489,10 +2489,9 @@ function openOutlookApp(){
 /* Outlook on the web (Aly, 2026-11-27): compose deeplink in a new tab with the subject; the card is already on the clipboard (paste keeps the table). The plain-text body is added only when the whole link stays short enough not to be cut. */
 function shrOpenOwa(){
  var base='https://outlook.office365.com/mail/deeplink/compose?subject='+encodeURIComponent('Saponification samples result');
- var body=encodeURIComponent(window.__shrLastCardTxt||'');
- var url=(body&&(base.length+6+body.length)<=1800)?base+'&body='+body:base;
+ var url=base;   /* subject only: a URL body arrives as flat text, the table comes from the clipboard */
  var w=null;try{w=window.open(url,'_blank','noopener')}catch(e){}
- toast(w?'Copied. Outlook web opened - if the body is empty or plain, paste the card (Ctrl+V).':'Copied. Allow pop-ups for this site, then press the button again.');
+ toast(w?'Card copied. In the Outlook web message press Ctrl+V to paste the table.':'Copied. Allow pop-ups for this site, then press the button again.');
 }
 function shrDownloadEml(){
  var html=window.__shrLastCardHtml||'';
