@@ -2468,7 +2468,7 @@ function olHourRefresh(){
  window.addEventListener('resize',olHourRefresh);
  setTimeout(olHourRefresh,400);
 })();
-   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){if(window.ShrBridge||/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))return;b.style.display='none';if(h)h.style.display='none';}apply();window.addEventListener('load',apply);})();
+   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){return}apply();window.addEventListener('load',apply);})();
 function openOutlookApp(){
  if(window.ShrBridge){
   /* APK: native launch, works despite the WebView's blocked external links */
@@ -2481,8 +2481,20 @@ function openOutlookApp(){
   return;
  }
  /* Desktop: one best-effort Outlook protocol attempt, never a second compose window. */
-    toast('Copied. If Outlook does not open, open it manually and paste.');
-    try{window.location.href='ms-outlook:'}catch(e){}
+    /* Desktop (Aly, 2026-11-27): ms-outlook: opens New Outlook, so instead download an unsent .eml draft; Windows opens it in whatever .eml is associated with (Classic Outlook) */
+    try{shrDownloadEml()}catch(e){toast('Copied. Open Outlook and paste.')}
+}
+function shrDownloadEml(){
+ var html=window.__shrLastCardHtml||'';
+ var u8=new TextEncoder().encode('<html><body>'+html+'</body></html>');
+ var bin='';for(var i=0;i<u8.length;i+=8192)bin+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));
+ var b64=btoa(bin).replace(/(.{76})/g,'$1\r\n');
+ var eml='X-Unsent: 1\r\nSubject: RE: Saponification samples result\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'+b64+'\r\n';
+ var url=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));
+ var a=document.createElement('a');a.href=url;a.download='Saponification samples result.eml';
+ document.body.appendChild(a);a.click();document.body.removeChild(a);
+ setTimeout(function(){URL.revokeObjectURL(url)},4000);
+ toast('Copied. Draft downloaded - open it, or Reply All on the thread and paste.');
 }
 async function copyVisibleCardAndOpenOutlook(){
  var card=visibleHourCard();
@@ -2509,6 +2521,7 @@ async function copyVisibleCardAndOpenOutlook(){
  if(!ok){toast('Copy failed \u2013 Outlook not opened');return}
  cp.textContent='Copied \u2713';cp.classList.add('ok');
  setTimeout(function(){cp.textContent=old;cp.classList.remove('ok')},1800);
+ window.__shrLastCardHtml=o.html;
  toast('Copied \u2013 paste in Outlook');
  setTimeout(openOutlookApp,OUTLOOK_DELAY);
 }
