@@ -27,6 +27,7 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var
 h1{font-size:17px;margin:0 0 8px}
 .hrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .obtn{background:#0078D4;color:#fff;border:0;border-radius:9px;padding:9px 14px;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.obtn[hidden]{display:none}
 .obtn:hover{background:#106ebe}
 .obtn:active{background:#005a9e}
 .hrow h1{flex:1;min-width:0}
@@ -906,7 +907,7 @@ body.soapbg .ctl{color:var(--mut)}
 </head>
 <body>
 <header>
-<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><button id="openOwaBtn" class="obtn" type="button" hidden title="Outlook on the web: new message with the subject; the card is also copied">&#127760; Outlook web</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -2468,7 +2469,7 @@ function olHourRefresh(){
  window.addEventListener('resize',olHourRefresh);
  setTimeout(olHourRefresh,400);
 })();
-   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){return}apply();window.addEventListener('load',apply);})();
+   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){var ow=document.getElementById('openOwaBtn');if(ow&&!window.ShrBridge&&!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))ow.hidden=false}apply();window.addEventListener('load',apply);})();
 function openOutlookApp(){
  if(window.ShrBridge){
   /* APK: native launch, works despite the WebView's blocked external links */
@@ -2482,7 +2483,16 @@ function openOutlookApp(){
  }
  /* Desktop: one best-effort Outlook protocol attempt, never a second compose window. */
     /* Desktop (Aly, 2026-11-27): ms-outlook: opens New Outlook, so instead download an unsent .eml draft; Windows opens it in whatever .eml is associated with (Classic Outlook) */
+    if(window.__shrMode==='owa'){window.__shrMode='';shrOpenOwa();return}
     try{shrDownloadEml()}catch(e){toast('Copied. Open Outlook and paste.')}
+}
+/* Outlook on the web (Aly, 2026-11-27): compose deeplink in a new tab with the subject; the card is already on the clipboard (paste keeps the table). The plain-text body is added only when the whole link stays short enough not to be cut. */
+function shrOpenOwa(){
+ var base='https://outlook.office365.com/mail/deeplink/compose?subject='+encodeURIComponent('Saponification samples result');
+ var body=encodeURIComponent(window.__shrLastCardTxt||'');
+ var url=(body&&(base.length+6+body.length)<=1800)?base+'&body='+body:base;
+ var w=null;try{w=window.open(url,'_blank','noopener')}catch(e){}
+ toast(w?'Copied. Outlook web opened - if the body is empty or plain, paste the card (Ctrl+V).':'Copied. Allow pop-ups for this site, then press the button again.');
 }
 function shrDownloadEml(){
  var html=window.__shrLastCardHtml||'';
@@ -2521,11 +2531,13 @@ async function copyVisibleCardAndOpenOutlook(){
  if(!ok){toast('Copy failed \u2013 Outlook not opened');return}
  cp.textContent='Copied \u2713';cp.classList.add('ok');
  setTimeout(function(){cp.textContent=old;cp.classList.remove('ok')},1800);
- window.__shrLastCardHtml=o.html;
+ window.__shrLastCardHtml=o.html;window.__shrLastCardTxt=o.txt;
  toast('Copied \u2013 paste in Outlook');
  setTimeout(openOutlookApp,OUTLOOK_DELAY);
 }
 document.addEventListener('click',function(e){
+ var ow=(e.target&&e.target.closest)?e.target.closest('#openOwaBtn'):null;
+ if(ow){e.preventDefault();window.__shrMode='owa';copyVisibleCardAndOpenOutlook();return}
  var b=(e.target&&e.target.closest)?e.target.closest('#openOutlookBtn'):null;
  if(b){e.preventDefault();copyVisibleCardAndOpenOutlook()}
 });
