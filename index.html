@@ -907,7 +907,7 @@ body.soapbg .ctl{color:var(--mut)}
 </head>
 <body>
 <header>
-<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><button id="openOlProtoBtn" class="obtn" type="button" hidden title="Same as the phone app button: copies the card and opens Outlook with ms-outlook: (New Outlook on Windows)">&#128241; Open Outlook (phone style)</button><button id="openOwaBtn" class="obtn" type="button" hidden title="Outlook on the web: new message with the subject; the card is also copied">&#127760; Outlook web</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><button id="openOwaBtn" class="obtn" type="button" hidden title="Outlook on the web: new message with the subject; the card is also copied">&#127760; Outlook web</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -2469,7 +2469,7 @@ function olHourRefresh(){
  window.addEventListener('resize',olHourRefresh);
  setTimeout(olHourRefresh,400);
 })();
-   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){var ow=document.getElementById('openOwaBtn');if(ow&&!window.ShrBridge&&!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){ow.hidden=false;var op=document.getElementById('openOlProtoBtn');if(op)op.hidden=false}}apply();window.addEventListener('load',apply);})();
+   /* PC only (Aly, 2026-11-22): Windows hands ms-outlook: to the unconfigured new Outlook and a web page cannot route it to classic Outlook, so on desktop this button is hidden and the card's own Copy covers the flow; Android, iOS and the APK keep it (their Outlook links open the Outlook app), and ShrBridge is re-checked on load in case the APK bridge arrives late. */;(function hideOutlookBtnOnPc(){var b=document.getElementById('openOutlookBtn'),h=document.getElementById('olHour');if(!b)return;function apply(){var ow=document.getElementById('openOwaBtn');if(ow&&!window.ShrBridge&&!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))ow.hidden=false}apply();window.addEventListener('load',apply);})();
 function openOutlookApp(){
  if(window.ShrBridge){
   /* APK: native launch, works despite the WebView's blocked external links */
@@ -2484,23 +2484,23 @@ function openOutlookApp(){
  /* Desktop: one best-effort Outlook protocol attempt, never a second compose window. */
     /* Desktop (Aly, 2026-11-27): ms-outlook: opens New Outlook, so instead download an unsent .eml draft; Windows opens it in whatever .eml is associated with (Classic Outlook) */
     if(window.__shrMode==='owa'){window.__shrMode='';shrOpenOwa();return}
-    if(window.__shrMode==='proto'){window.__shrMode='';
-     /* phone-style: ask Windows to open the Outlook app (ms-outlook:); if this page keeps the focus and stays visible, no app took the link, so open Outlook on the web mail list instead */
-     var lost=false,onb=function(){lost=true};window.addEventListener('blur',onb);document.addEventListener('visibilitychange',onb);
-     toast('Copied. Opening Outlook...');
-     try{window.location.href='ms-outlook:'}catch(e){}
-     setTimeout(function(){window.removeEventListener('blur',onb);document.removeEventListener('visibilitychange',onb);
-      if(!lost&&document.hasFocus()&&!document.hidden){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
-      else toast('Copied. If Outlook did not open, open it and paste.')},1600);
-     return}
-    try{shrDownloadEml()}catch(e){toast('Copied. Open Outlook and paste.')}
+    try{shrOpenOutlookApp()}catch(e){toast('Copied. Open Outlook and paste.')}
 }
 /* Outlook on the web (Aly, 2026-11-27): compose deeplink in a new tab with the subject; the card is already on the clipboard (paste keeps the table). The plain-text body is added only when the whole link stays short enough not to be cut. */
 function shrOpenOwa(verified){
- var base='https://outlook.office365.com/mail/deeplink/compose?subject='+encodeURIComponent('Saponification samples result');
+ var base='https://outlook.cloud.microsoft/mail/';
  var url=base;   /* subject only: a URL body arrives as flat text, the table comes from the clipboard */
  var w=null;try{w=window.open(url,'_blank');if(w){try{w.opener=null}catch(e2){}}}catch(e){}
- toast(w?(verified===false?'Card copied (could not verify). ':'Card copied. ')+'In Outlook press the Paste button (Message tab), not Ctrl+V.':'Copied. Allow pop-ups for this site, then press the button again.');
+ toast(w?(verified===false?'Card copied (could not verify). ':'Card copied. ')+'Outlook web mail list opened.':'Copied. Allow pop-ups for this site, then press the button again.');
+}
+function shrOpenOutlookApp(){
+ /* phone-style: ask Windows to open the Outlook app (ms-outlook:); if this page keeps the focus and stays visible, no app took the link, so open Outlook on the web mail list instead */
+ var lost=false,onb=function(){lost=true};window.addEventListener('blur',onb);document.addEventListener('visibilitychange',onb);
+ toast('Copied. Opening Outlook...');
+ try{window.location.href='ms-outlook:'}catch(e){}
+ setTimeout(function(){window.removeEventListener('blur',onb);document.removeEventListener('visibilitychange',onb);
+  if(!lost&&document.hasFocus()&&!document.hidden){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
+  else toast('Copied. If Outlook did not open, open it and paste.')},1600);
 }
 function shrDownloadEml(){
  var html=window.__shrLastCardHtml||'';
@@ -2557,8 +2557,6 @@ async function copyVisibleCardAndOpenOutlook(){
  setTimeout(openOutlookApp,OUTLOOK_DELAY);
 }
 document.addEventListener('click',function(e){
- var op=(e.target&&e.target.closest)?e.target.closest('#openOlProtoBtn'):null;
- if(op){e.preventDefault();window.__shrMode='proto';copyVisibleCardAndOpenOutlook();return}
  var ow=(e.target&&e.target.closest)?e.target.closest('#openOwaBtn'):null;
  if(ow){e.preventDefault();window.__shrMode='owa';copyVisibleCardAndOpenOutlook();return}
  var b=(e.target&&e.target.closest)?e.target.closest('#openOutlookBtn'):null;
