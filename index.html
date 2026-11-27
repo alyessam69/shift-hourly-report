@@ -2484,7 +2484,15 @@ function openOutlookApp(){
  /* Desktop: one best-effort Outlook protocol attempt, never a second compose window. */
     /* Desktop (Aly, 2026-11-27): ms-outlook: opens New Outlook, so instead download an unsent .eml draft; Windows opens it in whatever .eml is associated with (Classic Outlook) */
     if(window.__shrMode==='owa'){window.__shrMode='';shrOpenOwa();return}
-    if(window.__shrMode==='proto'){window.__shrMode='';toast('Copied. If Outlook does not open, open it manually and paste.');try{window.location.href='ms-outlook:'}catch(e){}return}
+    if(window.__shrMode==='proto'){window.__shrMode='';
+     /* phone-style: ask Windows to open the Outlook app (ms-outlook:); if this page keeps the focus and stays visible, no app took the link, so open Outlook on the web mail list instead */
+     var lost=false,onb=function(){lost=true};window.addEventListener('blur',onb);document.addEventListener('visibilitychange',onb);
+     toast('Copied. Opening Outlook...');
+     try{window.location.href='ms-outlook:'}catch(e){}
+     setTimeout(function(){window.removeEventListener('blur',onb);document.removeEventListener('visibilitychange',onb);
+      if(!lost&&document.hasFocus()&&!document.hidden){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
+      else toast('Copied. If Outlook did not open, open it and paste.')},1600);
+     return}
     try{shrDownloadEml()}catch(e){toast('Copied. Open Outlook and paste.')}
 }
 /* Outlook on the web (Aly, 2026-11-27): compose deeplink in a new tab with the subject; the card is already on the clipboard (paste keeps the table). The plain-text body is added only when the whole link stays short enough not to be cut. */
