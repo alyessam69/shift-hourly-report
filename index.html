@@ -907,7 +907,7 @@ body.soapbg .ctl{color:var(--mut)}
 </head>
 <body>
 <header>
-<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><button id="openOwaBtn" class="obtn" type="button" hidden title="Outlook on the web: new message with the subject; the card is also copied">&#127760; Outlook web</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -2507,7 +2507,7 @@ function shrOpenOutlookApp(){
   setTimeout(function(){done();
    if(kept()){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
    else toast('Copied. If Outlook did not open, open it and paste.')},1600);
- },1600);
+ },3500);
 }
 function shrDownloadEml(){
  var html=window.__shrLastCardHtml||'';
