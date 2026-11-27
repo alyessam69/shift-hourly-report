@@ -2494,13 +2494,20 @@ function shrOpenOwa(verified){
  toast(w?(verified===false?'Card copied (could not verify). ':'Card copied. ')+'Outlook web mail list opened.':'Copied. Allow pop-ups for this site, then press the button again.');
 }
 function shrOpenOutlookApp(){
- /* PC (Aly, 2026-11-27): New Outlook is removed on his PC, so ask Windows for the Classic Outlook app with a mailto: link (opens the default mail app = Classic Outlook; outlook: did nothing on his PC); if this page keeps the focus and stays visible, no app took the link, so open Outlook on the web mail list instead */
+ /* PC (Aly, 2026-11-27): try the full Classic Outlook window first (outlook:inbox, needs the one-time outlook: registry file), then a new Classic message (mailto:), then Outlook web. Each step only runs if this page kept the focus (nothing took the link). */
  var lost=false,onb=function(){lost=true};window.addEventListener('blur',onb);document.addEventListener('visibilitychange',onb);
+ var kept=function(){return !lost&&document.hasFocus()&&!document.hidden};
+ var done=function(){window.removeEventListener('blur',onb);document.removeEventListener('visibilitychange',onb)};
  toast('Copied. Opening Outlook...');
- try{window.location.href='mailto:?subject='+encodeURIComponent('RE: Saponification samples result')}catch(e){}
- setTimeout(function(){window.removeEventListener('blur',onb);document.removeEventListener('visibilitychange',onb);
-  if(!lost&&document.hasFocus()&&!document.hidden){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
-  else toast('Copied. If Outlook did not open, open it and paste.')},1600);
+ try{window.location.href='outlook:inbox'}catch(e){}
+ setTimeout(function(){
+  if(!kept()){done();toast('Copied. Outlook opened - Reply All and paste.');return}
+  toast('Copied. Trying a new Outlook message...');
+  try{window.location.href='mailto:?subject='+encodeURIComponent('RE: Saponification samples result')}catch(e){}
+  setTimeout(function(){done();
+   if(kept()){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
+   else toast('Copied. If Outlook did not open, open it and paste.')},1600);
+ },1600);
 }
 function shrDownloadEml(){
  var html=window.__shrLastCardHtml||'';
