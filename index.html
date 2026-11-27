@@ -28,6 +28,8 @@ h1{font-size:17px;margin:0 0 8px}
 .hrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .obtn{background:#0078D4;color:#fff;border:0;border-radius:9px;padding:9px 14px;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
 .obtn[hidden]{display:none}
+#shrSend:not([hidden]){display:inline-flex;align-items:center;gap:6px}
+#shrAt[hidden]{display:none}
 .obtn:hover{background:#106ebe}
 .obtn:active{background:#005a9e}
 .hrow h1{flex:1;min-width:0}
@@ -907,7 +909,7 @@ body.soapbg .ctl{color:var(--mut)}
 </head>
 <body>
 <header>
-<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button">&#128231; open outlook &amp; Copy date</button><span id="shrSend" hidden><select id="shrMode" title="Preview = open the reply only. Auto send = sends right away. Send at = delayed delivery" style="padding:8px;border-radius:9px;border:1px solid #888;font-size:14px"><option value="preview">Preview</option><option value="auto">Auto send</option><option value="defer">Send at</option></select><input id="shrAt" type="time" hidden style="padding:7px;border-radius:9px;border:1px solid #888;font-size:14px"></span><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -2502,6 +2504,7 @@ function shrOpenOutlookApp(){
  try{window.location.href='outlook:inbox'}catch(e){}
  setTimeout(function(){
   if(!kept()){done();toast('Copied. Outlook opened - Reply All and paste.');return}
+  if(window.__shrSendMode&&window.__shrSendMode!=='preview'){done();toast('Outlook did not take the link - nothing was sent. Check the Outlook link setup.');return}
   toast('Copied. Trying a new Outlook message...');
   try{window.location.href='mailto:?subject='+encodeURIComponent('RE: Saponification samples result')}catch(e){}
   setTimeout(function(){done();
@@ -2528,16 +2531,29 @@ async function copyVisibleCardAndOpenOutlook(){
     Plodder-table state and size), but awaited: Outlook opens ONLY after the
     copy actually succeeded, a failed copy never opens Outlook */
  var o=blkOut(card.querySelector('.blk'));
+ /* PC send mode (Aly, 2026-11-27): preview (default, nothing extra on the clipboard) / auto / defer. For auto and defer a small marker is added to the copied html only; the Outlook handler reads it (fresh for 2 min) */
+ var sm='preview',smIso='',smEl=document.getElementById('shrMode');
+ if(!window.ShrBridge&&smEl&&!document.getElementById('shrSend').hidden)sm=smEl.value||'preview';
+ if(sm==='defer'){
+  var tv=(document.getElementById('shrAt').value||'').match(/^(\d\d):(\d\d)$/);
+  if(!tv){toast('Pick a send time first');return}
+  var dd=new Date();dd.setHours(+tv[1],+tv[2],0,0);
+  if(dd.getTime()<Date.now()+60000){toast('That time has already passed - pick a later time');return}
+  var p2=function(n){return (n<10?'0':'')+n};
+  smIso=dd.getFullYear()+'-'+p2(dd.getMonth()+1)+'-'+p2(dd.getDate())+'T'+p2(dd.getHours())+':'+p2(dd.getMinutes());
+ }
+ window.__shrSendMode=sm;
+ var cpHtml=(sm==='preview')?o.html:('<div data-shr="SHR1|'+sm+'|'+Math.floor(Date.now()/1000)+'|'+smIso+'">'+o.html+'</div>');
  var cp=card.querySelector('.cp'),old=cp.textContent;
  var ok=false;
  try{
   if(navigator.clipboard&&window.ClipboardItem){
-   await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([o.html],{type:'text/html'}),'text/plain':new Blob([o.txt],{type:'text/plain'})})]);
+   await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([cpHtml],{type:'text/html'}),'text/plain':new Blob([o.txt],{type:'text/plain'})})]);
    ok=true;
   }
  }catch(e){ok=false}
  if(!ok){                                   /* same fallback style as copyOut */
-  var d=document.createElement('div');d.innerHTML=o.html;d.style.cssText='position:fixed;left:0;top:0;opacity:0';
+  var d=document.createElement('div');d.innerHTML=cpHtml;d.style.cssText='position:fixed;left:0;top:0;opacity:0';
   document.body.appendChild(d);var r=document.createRange();r.selectNodeContents(d);
   var s=window.getSelection();s.removeAllRanges();s.addRange(r);
   try{ok=document.execCommand('copy')}catch(e){ok=false}
@@ -2560,9 +2576,17 @@ async function copyVisibleCardAndOpenOutlook(){
   if(chk==='bad'){window.__shrMode='';toast('Clipboard has no table - Outlook not opened. Press the button again.');return}
   window.__shrMode='';shrOpenOwa(chk==='ok');return;
  }
- toast('Copied \u2013 paste in Outlook');
+ toast(sm==='auto'?'Copied - Outlook will SEND the reply now':sm==='defer'?'Copied - reply will be scheduled for '+smIso.slice(11):'Copied \u2013 paste in Outlook');
  setTimeout(openOutlookApp,OUTLOOK_DELAY);
 }
+
+(function(){
+ var pc=!window.ShrBridge&&!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'');
+ var w=document.getElementById('shrSend'),m=document.getElementById('shrMode'),t=document.getElementById('shrAt');
+ if(!w||!m)return;
+ if(pc)w.hidden=false;
+ m.addEventListener('change',function(){t.hidden=(m.value!=='defer')});
+})();
 document.addEventListener('click',function(e){
  var ow=(e.target&&e.target.closest)?e.target.closest('#openOwaBtn'):null;
  if(ow){e.preventDefault();window.__shrMode='owa';copyVisibleCardAndOpenOutlook();return}
