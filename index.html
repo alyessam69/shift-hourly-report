@@ -2494,10 +2494,10 @@ function shrOpenOwa(verified){
  toast(w?(verified===false?'Card copied (could not verify). ':'Card copied. ')+'Outlook web mail list opened.':'Copied. Allow pop-ups for this site, then press the button again.');
 }
 function shrOpenOutlookApp(){
- /* phone-style: ask Windows to open the Outlook app (ms-outlook:); if this page keeps the focus and stays visible, no app took the link, so open Outlook on the web mail list instead */
+ /* PC (Aly, 2026-11-27): New Outlook is removed on his PC, so ask Windows for the Classic Outlook app with the outlook: link (ms-outlook: is New Outlook only); if this page keeps the focus and stays visible, no app took the link, so open Outlook on the web mail list instead */
  var lost=false,onb=function(){lost=true};window.addEventListener('blur',onb);document.addEventListener('visibilitychange',onb);
  toast('Copied. Opening Outlook...');
- try{window.location.href='ms-outlook:'}catch(e){}
+ try{window.location.href='outlook:'}catch(e){}
  setTimeout(function(){window.removeEventListener('blur',onb);document.removeEventListener('visibilitychange',onb);
   if(!lost&&document.hasFocus()&&!document.hidden){toast('No Outlook app opened - opening Outlook on the web. Card is copied.');try{window.open('https://outlook.cloud.microsoft/mail/','_blank')}catch(e){}}
   else toast('Copied. If Outlook did not open, open it and paste.')},1600);
