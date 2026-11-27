@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reply All + Card</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+body{font:14px Segoe UI,Arial,sans-serif;margin:10px;color:#222}
+h1{font-size:16px;margin:0 0 6px}
+#subj{padding:6px 8px;border-radius:6px;background:#eef3fb;margin:6px 0;word-break:break-word}
+#subj.warn{background:#fff3cd}
+#card{min-height:90px;max-height:210px;overflow:auto;border:2px dashed #0078D4;border-radius:8px;padding:6px;margin:6px 0;background:#fafcff}
+#card:empty:before{content:"Click here and press Ctrl+V to paste the card copied from the app";color:#667}
+button{display:block;width:100%;margin:6px 0;padding:10px;border:0;border-radius:8px;background:#0078D4;color:#fff;font:600 14px Segoe UI,Arial;cursor:pointer}
+button.sec{background:#e6e6e6;color:#222}
+button:disabled{opacity:.5;cursor:default}
+#msg{margin-top:6px;padding:6px 8px;border-radius:6px;display:none;white-space:pre-line}
+#msg.ok{display:block;background:#dff6dd}#msg.err{display:block;background:#fde7e9}
+</style></head><body>
+<h1>Reply All + Card</h1>
+<div id="subj">Open the mail "Saponification samples result"</div>
+<div id="card" contenteditable="true" spellcheck="false"></div>
+<button id="rd" class="sec" type="button">Read card from clipboard</button>
+<button id="go" type="button" disabled>Reply All with this card</button>
+<div id="msg"></div>
+<div style="font-size:12px;color:#667;margin-top:8px">Opens the Reply All window with the table inside. It never sends: you press Send.</div>
+<script>
+(function(){
+ var SUBJ='Saponification samples result',KEY='shrCard',card=document.getElementById('card'),go=document.getElementById('go'),msg=document.getElementById('msg'),sj=document.getElementById('subj');
+ var html='';
+ function say(t,ok){msg.textContent=t;msg.className=ok?'ok':'err'}
+ function clean(h){var d=new DOMParser().parseFromString(h,'text/html');[].forEach.call(d.querySelectorAll('script,style,meta,link,iframe,object'),function(n){n.remove()});
+  [].forEach.call(d.querySelectorAll('*'),function(n){[].slice.call(n.attributes).forEach(function(a){if(/^on/i.test(a.name))n.removeAttribute(a.name)})});return d.body.innerHTML.replace(/<!--[\s\S]*?-->/g,'')}
+ function setCard(h){html=h||'';card.innerHTML=html;try{localStorage.setItem(KEY,html)}catch(e){}go.disabled=!/<table/i.test(html);
+  if(html&&!/<table/i.test(html))say('That is not the table card. Copy the card in the app first.',0);else if(html)say('Card ready ('+html.length+' chars). Select the mail and press Reply All.',1)}
+ card.addEventListener('paste',function(e){var cd=e.clipboardData;if(!cd)return;e.preventDefault();var h=cd.getData('text/html');
+  if(!h){say('The clipboard has no HTML table. In the app press Copy on the hour card, then paste here.',0);return}setCard(clean(h))});
+ card.addEventListener('keydown',function(e){if(!(e.ctrlKey||e.metaKey)&&e.key.length===1)e.preventDefault()});
+ document.getElementById('rd').onclick=async function(){try{var its=await navigator.clipboard.read(),h='';
+  for(var i=0;i<its.length;i++){if(its[i].types.indexOf('text/html')>-1)h=await(await its[i].getType('text/html')).text()}
+  if(!h){say('Clipboard has no HTML. Paste into the box with Ctrl+V instead.',0);return}setCard(clean(h))}catch(e){say('Outlook does not let this panel read the clipboard. Click the box and press Ctrl+V.',0)}};
+ function item(){return Office.context&&Office.context.mailbox&&Office.context.mailbox.item}
+ function showSubject(){var it=item();if(!it){sj.textContent='No mail selected';return}var s=it.subject||'';
+  var okS=s.toLowerCase().indexOf(SUBJ.toLowerCase())>-1;sj.className=okS?'':'warn';sj.textContent=(okS?'\u2713 ':'\u26A0 not the usual subject: ')+s}
+ go.onclick=function(){var it=item();if(!it){say('No mail is open.',0);return}
+  if(!/<table/i.test(html)){say('Paste the card first.',0);return}
+  if(html.length>30000){say('The card is too big for Outlook ('+html.length+' chars, limit about 32000). Use a smaller card size in the app.',0);return}
+  go.disabled=true;
+  try{it.displayReplyAllFormAsync({htmlBody:html+'<br>'},function(r){go.disabled=false;
+   if(r&&r.status===Office.AsyncResultStatus.Failed)say('Outlook refused: '+(r.error&&r.error.message||'unknown'),0);else say('Reply All window opened with the card. Check it and press Send yourself.',1)})}
+  catch(e){go.disabled=false;say('Error: '+e.message,0)}};
+ Office.onReady(function(){showSubject();
+  try{Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged,showSubject)}catch(e){}
+  var saved='';try{saved=localStorage.getItem(KEY)||''}catch(e){}if(saved)setCard(saved)});
+})();
+</script></body></html>
