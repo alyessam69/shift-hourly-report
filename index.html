@@ -909,7 +909,7 @@ body.soapbg .ctl{color:var(--mut)}
 </head>
 <body>
 <header>
-<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span></div>
+<div class="hrow"><h1>Shift Hourly Report <span id="sv" style="font-size:12px;font-weight:400;color:var(--mut);margin-left:6px"></span></h1><button id="install" class="ib" type="button" hidden>Install app</button><button id="syncBtn" class="ib" type="button">Sync</button><span id="syncSt" class="syncst" hidden></span><button id="openOutlookBtn" class="obtn" type="button" hidden>&#128231; open outlook &amp; Copy date</button><span id="olHour" style="font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap"></span></div>
 <div class="tabs" id="tabs"></div>
 </header>
 <main id="main"></main>
@@ -2441,6 +2441,77 @@ tabs.appendChild(sq);
 var sj=document.createElement('button');sj.className='sj';sj.innerHTML='Summary<small>↓ tables</small>';sj.onclick=function(){var e=document.getElementById('sum');if(e)e.scrollIntoView({behavior:'smooth'})};tabs.appendChild(sj);
 tabs.children[0].click();
 
+var OUTLOOK_DELAY=600;
+function visibleHourCard(){
+ var cards=hourCards();
+ /* usable region EXCLUDES the app's sticky header: a card hidden under the
+    header is not the card he is standing on */
+ var hd=document.querySelector('header'),top=hd?hd.getBoundingClientRect().bottom:0;
+ var vh=window.innerHeight,mid=(top+vh)/2;
+ var best=null,bestVis=0;
+ for(var i=0;i<cards.length;i++){
+  var r=cards[i].getBoundingClientRect();
+  var vis=Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,top));
+  if(r.top<=mid&&r.bottom>=mid) return cards[i];   /* card under the middle of the usable screen wins */
+  if(vis>bestVis){bestVis=vis;best=cards[i]}
+ }
+ return best;                                       /* else the most visible card, or null */
+}
+function olHourRefresh(){
+ var s=document.getElementById('olHour');if(!s)return;
+ var c=visibleHourCard();
+ s.textContent=c?('\u25B8 copies '+pad(c._h)):'\u25B8 scroll to a card';
+}
+(function initOlHour(){
+ var ticking=false;
+ window.addEventListener('scroll',function(){
+  if(ticking)return;ticking=true;
+  requestAnimationFrame(function(){ticking=false;olHourRefresh()});
+ },{passive:true});
+ window.addEventListener('resize',olHourRefresh);
+ setTimeout(olHourRefresh,400);
+})();
+   /* Phone only (Aly, 2026-11-28): the button copies the visible hour card and then opens the phone's Outlook app - in the APK through the native bridge (shrOpenOutlook), in the Android browser through the ms-outlook intent. It sends nothing by itself. On the computer the button stays hidden and nothing here launches Outlook: the desktop page only has the card's own Copy. */;(function showOutlookButtonOnPhone(){var b=document.getElementById('openOutlookBtn');if(!b)return;function apply(){var ph=!!window.ShrBridge||/Android/i.test(navigator.userAgent||'');b.hidden=!ph;if(!ph){var h=document.getElementById('olHour');if(h)h.hidden=true}olHourRefresh()}apply();window.addEventListener('load',apply);})();
+function openOutlookApp(){
+ if(window.shrOpenOutlook){
+  /* APK: native launch, works despite the WebView's blocked external links */
+  shrOpenOutlook().catch(function(e){ toast(e&&e.message?e.message:'Could not open Outlook'); });
+  return;
+ }
+ /* Android browser: deep-link into the Outlook app */
+ try{window.location.href='intent://emails/inbox#Intent;scheme=ms-outlook;package=com.microsoft.office.outlook;end'}catch(e){}
+}
+async function copyVisibleCardAndOpenOutlook(){
+ var card=visibleHourCard();
+ if(!card){toast('Scroll to an hour card first');return}
+ /* same payload as the card's own Copy (blkOut: same html+txt, same
+    Plodder-table state and size), awaited so Outlook opens only after the
+    copy actually succeeded */
+ var o=blkOut(card.querySelector('.blk'));
+ var cp=card.querySelector('.cp'),old=cp.textContent,ok=false;
+ try{
+  if(navigator.clipboard&&window.ClipboardItem){
+   await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([o.html],{type:'text/html'}),'text/plain':new Blob([o.txt],{type:'text/plain'})})]);
+   ok=true;
+  }
+ }catch(e){ok=false}
+ if(!ok){
+  var d=document.createElement('div');d.innerHTML=o.html;d.style.cssText='position:fixed;left:0;top:0;opacity:0';
+  document.body.appendChild(d);var r=document.createRange();r.selectNodeContents(d);
+  var s=window.getSelection();s.removeAllRanges();s.addRange(r);
+  try{ok=document.execCommand('copy')}catch(e){ok=false}
+  s.removeAllRanges();document.body.removeChild(d);
+ }
+ if(!ok){toast('Copy failed \u2013 Outlook not opened');return}
+ cp.textContent='Copied \u2713';cp.classList.add('ok');
+ setTimeout(function(){cp.textContent=old;cp.classList.remove('ok')},1800);
+ toast('Copied. Opening Outlook...');
+ setTimeout(openOutlookApp,OUTLOOK_DELAY);
+}
+document.addEventListener('click',function(e){
+ var b=(e.target&&e.target.closest)?e.target.closest('#openOutlookBtn'):null;
+ if(b){e.preventDefault();copyVisibleCardAndOpenOutlook()}
+});
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(reg){reg.addEventListener('updatefound',function(){var sw=reg.installing;if(!sw)return;sw.addEventListener('statechange',function(){if(sw.state==='installed'&&navigator.serviceWorker.controller){sw.postMessage('skip-waiting');navigator.serviceWorker.addEventListener('controllerchange',function(){location.reload()})}})})}).catch(function(){})})}
 </script>
 <script>
